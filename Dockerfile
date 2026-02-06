@@ -42,13 +42,23 @@ RUN set -eux; \
     cp -r "$bdinfo_dir"/. /opt/bdinfo/
 
 FROM mono:${RUNTIME_MONO_TAG}
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    ffmpeg \
-    mediainfo \
-    libgdiplus \
-    util-linux \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/mono-official-stable.list ]; then rm -f /etc/apt/sources.list.d/mono-official-stable.list; fi; \
+    if grep -qE 'jessie|stretch|buster' /etc/os-release; then \
+        echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until; \
+        sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list; \
+        sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list; \
+        sed -i 's|http://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list; \
+        sed -i '/-updates/d' /etc/apt/sources.list; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        ffmpeg \
+        mediainfo \
+        libgdiplus \
+        util-linux; \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
 COPY --from=bdinfo-build /opt/bdinfo /opt/bdinfo
 COPY bdinfo.sh /usr/local/bin/bdinfo
