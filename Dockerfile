@@ -1,5 +1,6 @@
 ARG BDINFO_REPO=https://github.com/dotnetcorecorner/BDInfo.git
 ARG BDINFO_REF=master
+ARG BDINFO_CSPROJ=
 ARG RUNTIME_BASE=debian:bookworm-slim
 ARG DOTNET_SDK_TAG=9.0-bookworm-slim
 
@@ -23,6 +24,7 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_TAG} AS bdinfo-build
 ARG BDINFO_REPO
 ARG BDINFO_REF
+ARG BDINFO_CSPROJ
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -36,7 +38,13 @@ RUN set -eux; \
         arm64) rid="linux-arm64" ;; \
         *) echo "unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    csproj="$(find . -maxdepth 5 -name '*BDInfo*CLI*.csproj' ! -name '*Test*' | head -n 1)"; \
+    csproj="$BDINFO_CSPROJ"; \
+    if [ -z "$csproj" ]; then \
+        csproj="$(grep -rl --include='*.csproj' '<OutputType>Exe</OutputType>' . | grep -i bdinfo | head -n 1 || true)"; \
+    fi; \
+    if [ -z "$csproj" ]; then \
+        csproj="$(find . -maxdepth 5 -name '*BDInfo*CLI*.csproj' ! -name '*Test*' | head -n 1)"; \
+    fi; \
     if [ -z "$csproj" ]; then \
         csproj="$(find . -maxdepth 5 -name '*BDInfo*.csproj' ! -name '*Test*' | head -n 1)"; \
     fi; \
@@ -49,7 +57,17 @@ RUN set -eux; \
         -p:PublishSingleFile=true \
         -p:PublishTrimmed=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
-        -o /out/bdinfo
+        -o /out/bdinfo; \
+    exe="$(find /out/bdinfo -maxdepth 1 -type f -perm /111 | head -n 1)"; \
+    if [ -z "$exe" ]; then \
+        echo "BDInfo executable not found in publish output" >&2; \
+        ls -la /out/bdinfo; \
+        exit 1; \
+    fi; \
+    if [ "$(basename "$exe")" != "BDInfo" ]; then \
+        mv "$exe" /out/bdinfo/BDInfo; \
+    fi; \
+    chmod +x /out/bdinfo/BDInfo
 
 FROM ${RUNTIME_BASE}
 RUN apt-get update && apt-get install -y --no-install-recommends \

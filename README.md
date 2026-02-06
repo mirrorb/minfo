@@ -23,8 +23,7 @@ The container image downloads and includes:
 - MediaInfo CLI
 - FFmpeg + FFprobe
 - util-linux (mount/umount for BDISO)
-- Mono (built from source)
-- BDInfoCLI-ng (built from source)
+- BDInfo (dotnetcorecorner/BDInfo, built from source)
 
 Optional env overrides:
 - BDINFO_ARGS (extra flags passed to BDInfo CLI)
@@ -78,8 +77,7 @@ GOOS=linux GOARCH=arm64 go build -o bin/minfo-arm64
 ```
 
 ## Notes
-- Docker build will compile Mono + BDInfoCLI-ng from source; it can take a long time on small machines.
-- You can override Mono/libgdiplus git refs with build args: `MONO_REF`, `LIBGDIPLUS_REF`.
+- Docker build will compile BDInfo from source; it can take a long time on small machines.
 - Uploads are saved to a temporary file and removed after each request.
 - For very large files or disc folders, use the server path input.
 - BD screenshots: accepts BDMV folders or BDISO files. For a folder containing ISO files, the first ISO found is used.
