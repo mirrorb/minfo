@@ -57,8 +57,8 @@ RUN set -eux; \
         sed -i 's|http://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list; \
         sed -i '/-updates/d' /etc/apt/sources.list; \
     fi; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
+    apt-get -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true update; \
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
         ca-certificates \
         libav-tools \
         mediainfo \
