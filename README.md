@@ -1,0 +1,68 @@
+﻿# minfo
+
+Local web UI to generate MediaInfo or BDInfo, plus a 4-shot screenshot download.
+
+## Docker Compose (one-click)
+```powershell
+docker compose up --build
+```
+Then open http://localhost:8080
+
+If you want to use the "server path" input, mount a host folder:
+```yaml
+services:
+  minfo:
+    volumes:
+      - /path/to/media:/media:ro
+```
+Then use `/media/...` in the UI.
+
+The container image downloads and includes:
+- MediaInfo CLI
+- FFmpeg + FFprobe
+- BDInfo v0.8.0.1b (Linux prebuilt)
+
+Optional env overrides:
+- BDINFO_ARGS (defaults to `-w`)
+
+## Requirements (local run)
+- MediaInfo CLI
+- BDInfo CLI
+- FFmpeg and FFprobe
+
+If the binaries are not on PATH, set these environment variables:
+- MEDIAINFO_BIN
+- BDINFO_BIN
+- FFMPEG_BIN
+- FFPROBE_BIN
+
+## Run
+```powershell
+go run .
+```
+Then open http://localhost:8080
+
+## Build (x64 / arm64)
+```powershell
+# Windows x64
+$env:GOOS = "windows"
+$env:GOARCH = "amd64"
+go build -o bin\minfo.exe
+
+# Windows arm64
+$env:GOARCH = "arm64"
+go build -o bin\minfo-arm64.exe
+
+# Linux x64
+$env:GOOS = "linux"
+$env:GOARCH = "amd64"
+go build -o bin\minfo
+
+# Linux arm64
+$env:GOARCH = "arm64"
+go build -o bin\minfo-arm64
+```
+
+## Notes
+- Uploads are saved to a temporary file and removed after each request.
+- For very large files or disc folders, use the server path input.

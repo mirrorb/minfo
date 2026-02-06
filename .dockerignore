@@ -1,0 +1,7 @@
+/bin/
+*.exe
+*.zip
+*.log
+.git
+.gitignore
+README.md
