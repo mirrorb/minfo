@@ -76,14 +76,14 @@ func resolveBDInfoSource(ctx context.Context, input string) (string, func(), err
 func resolveBDInfoRoot(path string) (string, bool) {
     base := filepath.Base(path)
     if strings.EqualFold(base, "BDMV") {
-        return path, true
+        return filepath.Dir(path), true
     }
     if strings.EqualFold(base, "STREAM") {
-        return filepath.Dir(path), true
+        return filepath.Dir(filepath.Dir(path)), true
     }
     bdmv := filepath.Join(path, "BDMV")
     if info, err := os.Stat(bdmv); err == nil && info.IsDir() {
-        return bdmv, true
+        return path, true
     }
     return "", false
 }

@@ -30,17 +30,16 @@ if [ -z "$bdinfo_bin" ] || [ ! -f "$bdinfo_bin" ]; then
 fi
 
 args="${BDINFO_ARGS:-}"
-report_name="bdinfo.txt"
 
 if [ "${bdinfo_bin##*.}" = "exe" ]; then
   # shellcheck disable=SC2086
-  if ! mono "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
+  if ! mono "$bdinfo_bin" $args "$input" "$out_dir" >"$log_file" 2>&1; then
     cat "$log_file" >&2
     exit 1
   fi
 else
   # shellcheck disable=SC2086
-  if ! "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
+  if ! "$bdinfo_bin" $args "$input" "$out_dir" >"$log_file" 2>&1; then
     cat "$log_file" >&2
     exit 1
   fi
