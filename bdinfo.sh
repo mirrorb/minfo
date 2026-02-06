@@ -20,20 +20,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bdinfo_exe="/opt/bdinfo/BDInfo.exe"
-if [ ! -f "$bdinfo_exe" ]; then
-  bdinfo_exe="$(find /opt/bdinfo -maxdepth 4 -type f -name 'BDInfo.exe' | head -n 1)"
+bdinfo_bin="/opt/bdinfo/BDInfo"
+if [ ! -f "$bdinfo_bin" ]; then
+  bdinfo_bin="$(find /opt/bdinfo -maxdepth 4 -type f -name 'BDInfo' | head -n 1)"
 fi
-if [ -z "$bdinfo_exe" ] || [ ! -f "$bdinfo_exe" ]; then
-  echo "bdinfo: BDInfo CLI not found under /opt/bdinfo" >&2
+if [ -z "$bdinfo_bin" ] || [ ! -f "$bdinfo_bin" ]; then
+  echo "bdinfo: BDInfo binary not found under /opt/bdinfo" >&2
   exit 1
 fi
 
 args="${BDINFO_ARGS:-}"
+report_name="bdinfo.txt"
 
-# Non-interactive scan; write report to temp directory
 # shellcheck disable=SC2086
-if ! mono "$bdinfo_exe" -w $args "$input" "$out_dir" >"$log_file" 2>&1; then
+if ! "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
   cat "$log_file" >&2
   exit 1
 fi
