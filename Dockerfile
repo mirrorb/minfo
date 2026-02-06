@@ -1,6 +1,6 @@
 ARG BDINFO_REPO=https://github.com/dotnetcorecorner/BDInfo.git
 ARG BDINFO_REF=master
-ARG BDINFO_CSPROJ=
+ARG BDINFO_CSPROJ=BDInfo.Core/BDInfo/BDInfo.csproj
 ARG RUNTIME_BASE=debian:bookworm-slim
 ARG DOTNET_SDK_TAG=9.0-bookworm-slim
 
@@ -38,22 +38,12 @@ RUN set -eux; \
         arm64) rid="linux-arm64" ;; \
         *) echo "unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    csproj="$BDINFO_CSPROJ"; \
-    if [ -z "$csproj" ]; then \
-        csproj="$(grep -rl --include='*.csproj' '<OutputType>Exe</OutputType>' . | grep -i bdinfo | head -n 1 || true)"; \
-    fi; \
-    if [ -z "$csproj" ]; then \
-        csproj="$(find . -maxdepth 5 -name '*BDInfo*CLI*.csproj' ! -name '*Test*' | head -n 1)"; \
-    fi; \
-    if [ -z "$csproj" ]; then \
-        csproj="$(find . -maxdepth 5 -name '*BDInfo*.csproj' ! -name '*Test*' | head -n 1)"; \
-    fi; \
-    if [ -z "$csproj" ]; then \
-        echo "BDInfo csproj not found" >&2; \
+    if [ ! -f "$BDINFO_CSPROJ" ]; then \
+        echo "BDInfo csproj not found: $BDINFO_CSPROJ" >&2; \
         exit 1; \
     fi; \
-    dotnet restore "$csproj"; \
-    dotnet publish "$csproj" -c Release -r "$rid" --self-contained true \
+    dotnet restore "$BDINFO_CSPROJ"; \
+    dotnet publish "$BDINFO_CSPROJ" -c Release -r "$rid" --self-contained true \
         -p:PublishSingleFile=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
         -o /out/bdinfo; \
@@ -63,7 +53,8 @@ RUN set -eux; \
         ls -la /out/bdinfo; \
         exit 1; \
     fi; \
-    if [ "$(basename "$exe")" != "BDInfo" ]; then \
+    exe_name="$(basename "$exe")"; \
+    if [ "$exe_name" != "BDInfo" ]; then \
         mv "$exe" /out/bdinfo/BDInfo; \
     fi; \
     chmod +x /out/bdinfo/BDInfo
