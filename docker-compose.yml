@@ -5,6 +5,10 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
+      MEDIAINFO_BIN: /usr/bin/mediainfo
+      FFMPEG_BIN: /usr/bin/ffmpeg
+      FFPROBE_BIN: /usr/bin/ffprobe
+      BDINFO_BIN: /usr/local/bin/bdinfo
     # If you want to use server path input, mount your media folder:
     # volumes:
     #   - ./media:/media:ro

@@ -42,25 +42,13 @@ go run .
 ```
 Then open http://localhost:8080
 
-## Build (x64 / arm64)
-```powershell
-# Windows x64
-$env:GOOS = "windows"
-$env:GOARCH = "amd64"
-go build -o bin\minfo.exe
-
-# Windows arm64
-$env:GOARCH = "arm64"
-go build -o bin\minfo-arm64.exe
-
+## Build (Linux x64 / arm64)
+```bash
 # Linux x64
-$env:GOOS = "linux"
-$env:GOARCH = "amd64"
-go build -o bin\minfo
+GOOS=linux GOARCH=amd64 go build -o bin/minfo
 
 # Linux arm64
-$env:GOARCH = "arm64"
-go build -o bin\minfo-arm64
+GOOS=linux GOARCH=arm64 go build -o bin/minfo-arm64
 ```
 
 ## Notes
