@@ -39,8 +39,56 @@ if ! "$bdinfo_bin" -p "$input" -o "$report_path" $args >"$log_file" 2>&1; then
   exit 1
 fi
 
-report="$(find "$out_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
-if [ -n "$report" ]; then
+report="$report_path"
+if [ ! -f "$report" ]; then
+  report="$(find "$out_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
+fi
+if [ -n "$report" ] && [ -f "$report" ]; then
+  filtered="$(mktemp)"
+  if awk '
+    function start_block() { block=""; block_size=0; }
+    function save_block() { if (block_idx > 0) { blocks[block_idx]=block; sizes[block_idx]=block_size; } }
+    BEGIN { block_idx=0; start_block(); }
+    {
+      if (!seen_playlist) {
+        if ($0 ~ /^PLAYLIST:/) {
+          seen_playlist=1;
+        } else {
+          prefix = prefix $0 ORS;
+          next;
+        }
+      }
+      if ($0 ~ /^PLAYLIST:/) {
+        if (block_idx > 0) { save_block(); }
+        block_idx++;
+        start_block();
+      }
+      block = block $0 ORS;
+      if ($0 ~ /^Size:[[:space:]]*[0-9,]+ bytes/) {
+        size = $0;
+        gsub(/[^0-9]/, "", size);
+        if (size + 0 > block_size) { block_size = size + 0; }
+      }
+    }
+    END {
+      if (block_idx > 0) { save_block(); }
+      if (block_idx == 0) {
+        printf "%s", prefix;
+        exit;
+      }
+      max = 0; maxi = 0;
+      for (i = 1; i <= block_idx; i++) {
+        if (sizes[i] > max) { max = sizes[i]; maxi = i; }
+      }
+      if (maxi == 0) { maxi = 1; }
+      printf "%s%s", prefix, blocks[maxi];
+    }
+  ' "$report" > "$filtered" 2>/dev/null; then
+    cat "$filtered"
+    rm -f "$filtered"
+    exit 0
+  fi
+  rm -f "$filtered"
   cat "$report"
   exit 0
 fi

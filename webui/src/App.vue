@@ -12,19 +12,53 @@
         <section class="panel">
             <div class="field">
                 <label for="path">媒体路径</label>
-                <input
-                    id="path"
-                    type="text"
-                    list="path-list"
-                    placeholder="/media/movie.mkv"
-                    v-model="path"
-                    @input="scheduleSuggest"
-                    @focus="scheduleSuggest"
-                />
-                <datalist id="path-list">
-                    <option v-for="item in suggestions" :key="item" :value="item"></option>
-                </datalist>
-                <p class="hint">支持路径搜索与自动补全（MEDIA_ROOT，默认 /media）。</p>
+                <div class="path-picker" @keydown="handleKeydown">
+                    <div class="path-input">
+                        <span class="path-icon">🔎</span>
+                        <input
+                            id="path"
+                            type="text"
+                            placeholder="/media/movie.mkv"
+                            v-model="path"
+                            @input="handleInput"
+                            @focus="handleFocus"
+                            @blur="handleBlur"
+                            autocomplete="off"
+                        />
+                        <button
+                            v-if="path.trim() !== ''"
+                            type="button"
+                            class="path-clear"
+                            @click="clearPath"
+                            :disabled="busy"
+                            aria-label="清空路径"
+                        >
+                            ×
+                        </button>
+                    </div>
+                    <div class="path-hint">
+                        <span>支持模糊搜索与路径补全（MEDIA_ROOT，默认 /media）。</span>
+                        <span class="path-meta" v-if="filteredSuggestions.length > 0">
+                            匹配 {{ filteredSuggestions.length }} 条
+                        </span>
+                    </div>
+                    <div class="path-suggestions" v-if="showSuggestions">
+                        <div
+                            v-for="(item, index) in filteredSuggestions"
+                            :key="item.value"
+                            class="suggestion"
+                            :class="{ active: index === activeIndex }"
+                            @mousedown.prevent="selectSuggestion(item.value)"
+                        >
+                            <span v-for="(segment, segIndex) in item.segments" :key="segIndex" :class="{ match: segment.match }">
+                                {{ segment.text }}
+                            </span>
+                        </div>
+                        <div v-if="filteredSuggestions.length === 0" class="suggestion empty">
+                            没有匹配的路径
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="actions">
                 <button :disabled="busy" @click="runInfo('/api/mediainfo', 'MediaInfo')">生成 MediaInfo</button>
@@ -62,11 +96,162 @@ export default {
             suggestTimer: null,
             suggestController: null,
             lastSuggest: null,
+            showSuggestions: false,
+            activeIndex: -1,
         };
+    },
+    computed: {
+        filteredSuggestions() {
+            const query = this.path.trim();
+            if (query === "") {
+                return this.suggestions.slice(0, 12).map((value) => ({
+                    value,
+                    score: 0,
+                    segments: [{ text: value, match: false }],
+                }));
+            }
+
+            const items = [];
+            for (const value of this.suggestions) {
+                const positions = this.matchPositions(value, query);
+                if (!positions) {
+                    continue;
+                }
+                items.push({
+                    value,
+                    score: this.scoreMatch(positions, value),
+                    segments: this.buildSegments(value, positions),
+                });
+            }
+
+            items.sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return a.value.length - b.value.length;
+            });
+            return items.slice(0, 12);
+        },
     },
     methods: {
         hasInput() {
             return this.path.trim() !== "";
+        },
+        handleInput() {
+            this.activeIndex = -1;
+            this.showSuggestions = true;
+            this.scheduleSuggest();
+        },
+        handleFocus() {
+            this.showSuggestions = true;
+            this.scheduleSuggest();
+        },
+        handleBlur() {
+            setTimeout(() => {
+                this.showSuggestions = false;
+                this.activeIndex = -1;
+            }, 120);
+        },
+        handleKeydown(event) {
+            if (!this.showSuggestions) {
+                return;
+            }
+            const list = this.filteredSuggestions;
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                if (list.length === 0) {
+                    return;
+                }
+                this.activeIndex = (this.activeIndex + 1) % list.length;
+            } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                if (list.length === 0) {
+                    return;
+                }
+                this.activeIndex = (this.activeIndex - 1 + list.length) % list.length;
+            } else if (event.key === "Enter") {
+                if (this.activeIndex >= 0 && this.activeIndex < list.length) {
+                    event.preventDefault();
+                    this.selectSuggestion(list[this.activeIndex].value);
+                }
+            } else if (event.key === "Escape") {
+                this.showSuggestions = false;
+                this.activeIndex = -1;
+            }
+        },
+        clearPath() {
+            this.path = "";
+            this.showSuggestions = false;
+            this.activeIndex = -1;
+            this.suggestions = [];
+        },
+        selectSuggestion(value) {
+            this.path = value;
+            this.showSuggestions = false;
+            this.activeIndex = -1;
+        },
+        matchPositions(value, query) {
+            const v = value.toLowerCase();
+            const q = query.toLowerCase();
+            const positions = [];
+            let index = 0;
+            for (const ch of q) {
+                const found = v.indexOf(ch, index);
+                if (found === -1) {
+                    return null;
+                }
+                positions.push(found);
+                index = found + 1;
+            }
+            return positions;
+        },
+        scoreMatch(positions, value) {
+            if (!positions || positions.length === 0) {
+                return 0;
+            }
+            const length = value.length;
+            let score = positions.length;
+            for (let i = 1; i < positions.length; i++) {
+                if (positions[i] === positions[i - 1] + 1) {
+                    score += 3;
+                } else {
+                    score += 1;
+                }
+            }
+            for (const pos of positions) {
+                if (pos === 0) {
+                    score += 3;
+                } else {
+                    const prev = pos - 1;
+                    if (prev >= 0 && prev < length && this.isBoundary(value[prev])) {
+                        score += 2;
+                    }
+                }
+            }
+            score += Math.max(0, 30 - positions[0]);
+            return score;
+        },
+        isBoundary(ch) {
+            return ch === "/" || ch === "\\" || ch === "_" || ch === "-" || ch === " ";
+        },
+        buildSegments(value, positions) {
+            const segments = [];
+            const posSet = new Set(positions);
+            let current = "";
+            let currentMatch = posSet.has(0);
+            for (let i = 0; i < value.length; i++) {
+                const isMatch = posSet.has(i);
+                if (isMatch !== currentMatch && current !== "") {
+                    segments.push({ text: current, match: currentMatch });
+                    current = "";
+                }
+                currentMatch = isMatch;
+                current += value[i];
+            }
+            if (current !== "") {
+                segments.push({ text: current, match: currentMatch });
+            }
+            return segments;
         },
         setBusy(isBusy, label) {
             this.busy = isBusy;
