@@ -20,9 +20,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bdinfo_bin="/opt/bdinfo/BDInfo"
+bdinfo_bin="/opt/bdinfo/BDInfo.exe"
 if [ ! -f "$bdinfo_bin" ]; then
-  bdinfo_bin="$(find /opt/bdinfo -maxdepth 4 -type f -name 'BDInfo' | head -n 1)"
+  bdinfo_bin="$(find /opt/bdinfo -maxdepth 4 -type f \( -name 'BDInfo.exe' -o -name 'BDInfo' \) | head -n 1)"
 fi
 if [ -z "$bdinfo_bin" ] || [ ! -f "$bdinfo_bin" ]; then
   echo "bdinfo: BDInfo binary not found under /opt/bdinfo" >&2
@@ -32,10 +32,18 @@ fi
 args="${BDINFO_ARGS:-}"
 report_name="bdinfo.txt"
 
-# shellcheck disable=SC2086
-if ! "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
-  cat "$log_file" >&2
-  exit 1
+if [ "${bdinfo_bin##*.}" = "exe" ]; then
+  # shellcheck disable=SC2086
+  if ! mono "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
+    cat "$log_file" >&2
+    exit 1
+  fi
+else
+  # shellcheck disable=SC2086
+  if ! "$bdinfo_bin" -p "$input" -r "$out_dir" -o "$report_name" $args >"$log_file" 2>&1; then
+    cat "$log_file" >&2
+    exit 1
+  fi
 fi
 
 report="$(find "$out_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
