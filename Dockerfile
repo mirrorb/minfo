@@ -8,35 +8,25 @@ ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
-FROM debian:bookworm-slim
-ARG TARGETARCH=amd64
-ARG BDINFO_VERSION=0.8.0.1b
+FROM debian:bookworm-slim AS bluray
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    gnupg \
-    unzip \
-    ffmpeg \
-    mediainfo \
+    git \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-      | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" \
-      > /etc/apt/sources.list.d/microsoft-prod.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends dotnet-runtime-6.0 \
+RUN git clone --depth 1 https://github.com/Aniverse/bluray.git /tmp/bluray
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    ffmpeg \
+    libarchive-tools \
+    mediainfo \
+    mono-runtime \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
-RUN case "$TARGETARCH" in \
-      amd64) bdinfo_arch="x64" ;; \
-      arm64) bdinfo_arch="arm64" ;; \
-      *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
-    esac \
-    && curl -fsSL -o /tmp/bdinfo.zip "https://github.com/UniqProject/BDInfo/releases/download/v${BDINFO_VERSION}/BDInfo_v${BDINFO_VERSION}-linux-${bdinfo_arch}.zip" \
-    && mkdir -p /opt/bdinfo \
-    && unzip -q /tmp/bdinfo.zip -d /opt/bdinfo \
-    && find /opt/bdinfo -maxdepth 4 -type f \( -iname 'BDInfo*' -o -iname 'bdinfo*' \) -exec chmod +x {} + \
-    && rm -f /tmp/bdinfo.zip
+COPY --from=bluray /tmp/bluray/tools/BDinfoCli.0.7.3 /opt/bdinfo/BDinfoCli.0.7.3
+COPY --from=bluray /tmp/bluray/tools/bdinfocli.exe /opt/bdinfo/bdinfocli.exe
+COPY --from=bluray /tmp/bluray/README.md /opt/bdinfo/README.bluray.md
 COPY bdinfo.sh /usr/local/bin/bdinfo
 RUN chmod +x /usr/local/bin/bdinfo
 ENV BDINFO_BIN=/usr/local/bin/bdinfo

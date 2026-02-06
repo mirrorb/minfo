@@ -19,31 +19,40 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bdinfo_bin="$(find /opt/bdinfo -maxdepth 4 -type f \( -iname 'BDInfo*' -o -iname 'bdinfo*' \) -perm /111 | head -n 1)"
-if [ -z "$bdinfo_bin" ]; then
-  echo "bdinfo: executable not found under /opt/bdinfo" >&2
+bdinfo_exe="/opt/bdinfo/BDinfoCli.0.7.3/BDInfo.exe"
+if [ ! -f "$bdinfo_exe" ]; then
+  bdinfo_exe="/opt/bdinfo/bdinfocli.exe"
+fi
+if [ ! -f "$bdinfo_exe" ]; then
+  bdinfo_exe="$(find /opt/bdinfo -maxdepth 4 -type f \( -name 'BDInfo.exe' -o -name 'bdinfocli.exe' \) | head -n 1)"
+fi
+if [ -z "$bdinfo_exe" ]; then
+  echo "bdinfo: BDInfo CLI not found under /opt/bdinfo" >&2
   exit 1
 fi
 
-args="${BDINFO_ARGS:--w}"
+args="${BDINFO_ARGS:-}"
 
-# shellcheck disable=SC2086
-if ! output="$(cd "$out_dir" && "$bdinfo_bin" $args "$input" 2>"$log_file")"; then
-  cat "$log_file" >&2
-  exit 1
+if printf '%s' "$bdinfo_exe" | grep -q "BDinfoCli.0.7.3"; then
+  # shellcheck disable=SC2086
+  if ! printf '1\nq\n' | mono "$bdinfo_exe" $args "$input" "$out_dir" >"$log_file" 2>&1; then
+    cat "$log_file" >&2
+    exit 1
+  fi
+else
+  # shellcheck disable=SC2086
+  if ! printf '1\n' | mono "$bdinfo_exe" $args "$input" "$out_dir" >"$log_file" 2>&1; then
+    cat "$log_file" >&2
+    exit 1
+  fi
 fi
 
-if [ -n "$(printf '%s' "$output" | tr -d '\r\n')" ]; then
-  printf '%s\n' "$output"
-  exit 0
-fi
-
-report="$(find "$out_dir" -maxdepth 1 -type f \( -iname '*.txt' -o -iname '*.log' -o -iname '*.bdinfo' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
+report="$(find "$out_dir" -maxdepth 1 -type f \( -iname 'BDINFO.*.txt' -o -iname 'bdinfo.full.txt' -o -iname '*.txt' -o -iname '*.log' -o -iname '*.bdinfo' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
 if [ -n "$report" ]; then
   cat "$report"
   exit 0
 fi
 
 cat "$log_file" >&2
-echo "bdinfo: no output produced" >&2
+echo "bdinfo: no report file produced" >&2
 exit 1
