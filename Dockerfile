@@ -1,5 +1,6 @@
 ARG MONO_TAG=5.12.0.226
 ARG RUNTIME_MONO_TAG=latest
+ARG NUGET_EXE_URL=https://dist.nuget.org/win-x86-commandline/v4.3.0/nuget.exe
 
 FROM node:20-bookworm-slim AS webui
 WORKDIR /app
@@ -25,14 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 https://github.com/zoffline/BDInfoCLI-ng.git /tmp/bdinfo
-RUN curl -fsSL -o /tmp/nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+RUN curl -fsSL -o /tmp/nuget.exe "$NUGET_EXE_URL"
 
 FROM mono:${MONO_TAG} AS bdinfo-build
 COPY --from=bdinfo-src /etc/ssl/certs /etc/ssl/certs
 COPY --from=bdinfo-src /tmp/bdinfo /tmp/bdinfo
 COPY --from=bdinfo-src /tmp/nuget.exe /tmp/nuget.exe
 WORKDIR /tmp/bdinfo
-RUN mono /tmp/nuget.exe restore BDInfo.sln
+RUN mono /tmp/nuget.exe restore BDInfo.sln -Source https://www.nuget.org/api/v2/
 RUN if command -v msbuild >/dev/null 2>&1; then msbuild BDInfo.sln /p:Configuration=Release; else xbuild /p:Configuration=Release BDInfo.sln; fi
 RUN set -eux; \
     bdinfo_exe="$(find /tmp/bdinfo -type f -name 'BDInfo.exe' -path '*bin/Release*' | head -n 1)"; \
