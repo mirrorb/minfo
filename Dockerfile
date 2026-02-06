@@ -1,4 +1,5 @@
 ARG MONO_TAG=5.12.0.226
+ARG RUNTIME_MONO_TAG=latest
 
 FROM node:20-bookworm-slim AS webui
 WORKDIR /app
@@ -17,16 +18,20 @@ ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
-FROM mono:${MONO_TAG} AS bdinfo-build
+FROM debian:bookworm-slim AS bdinfo-src
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
-    libgdiplus \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 https://github.com/zoffline/BDInfoCLI-ng.git /tmp/bdinfo
-WORKDIR /tmp/bdinfo
 RUN curl -fsSL -o /tmp/nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+
+FROM mono:${MONO_TAG} AS bdinfo-build
+COPY --from=bdinfo-src /etc/ssl/certs /etc/ssl/certs
+COPY --from=bdinfo-src /tmp/bdinfo /tmp/bdinfo
+COPY --from=bdinfo-src /tmp/nuget.exe /tmp/nuget.exe
+WORKDIR /tmp/bdinfo
 RUN mono /tmp/nuget.exe restore BDInfo.sln
 RUN if command -v msbuild >/dev/null 2>&1; then msbuild BDInfo.sln /p:Configuration=Release; else xbuild /p:Configuration=Release BDInfo.sln; fi
 RUN set -eux; \
@@ -36,7 +41,7 @@ RUN set -eux; \
     mkdir -p /opt/bdinfo; \
     cp -r "$bdinfo_dir"/. /opt/bdinfo/
 
-FROM mono:${MONO_TAG}
+FROM mono:${RUNTIME_MONO_TAG}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     ffmpeg \
