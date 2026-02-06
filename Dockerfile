@@ -55,7 +55,6 @@ RUN set -eux; \
     dotnet restore "$csproj"; \
     dotnet publish "$csproj" -c Release -r "$rid" --self-contained true \
         -p:PublishSingleFile=true \
-        -p:PublishTrimmed=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
         -o /out/bdinfo; \
     exe="$(find /out/bdinfo -maxdepth 1 -type f -perm /111 | head -n 1)"; \
