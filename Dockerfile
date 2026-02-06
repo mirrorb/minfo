@@ -19,7 +19,8 @@ ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0-bookworm-slim AS bdinfo-build
+ARG DOTNET_SDK_TAG=9.0-bookworm-slim
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_TAG} AS bdinfo-build
 ARG BDINFO_REPO
 ARG BDINFO_REF
 ARG TARGETARCH
@@ -35,7 +36,10 @@ RUN set -eux; \
         arm64) rid="linux-arm64" ;; \
         *) echo "unsupported TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    csproj="$(find . -maxdepth 3 -name '*BDInfo*.csproj' ! -name '*Test*' | head -n 1)"; \
+    csproj="$(find . -maxdepth 5 -name '*BDInfo*CLI*.csproj' ! -name '*Test*' | head -n 1)"; \
+    if [ -z "$csproj" ]; then \
+        csproj="$(find . -maxdepth 5 -name '*BDInfo*.csproj' ! -name '*Test*' | head -n 1)"; \
+    fi; \
     if [ -z "$csproj" ]; then \
         echo "BDInfo csproj not found" >&2; \
         exit 1; \
