@@ -1,6 +1,6 @@
 ﻿# minfo
 
-Local web UI to generate MediaInfo or BDInfo, plus a 4-shot screenshot download.
+Local web UI to generate MediaInfo or BDInfo, plus an 8-shot screenshot download.
 
 ## Docker Compose (one-click)
 ```powershell

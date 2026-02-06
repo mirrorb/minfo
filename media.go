@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
     "context"
@@ -43,6 +43,23 @@ func resolveScreenshotSource(ctx context.Context, input string) (string, func(),
     }
 
     return "", noop, errors.New("path does not contain BDMV or BDISO content")
+}
+
+func resolveMediaInfoSource(ctx context.Context, input string) (string, func(), error) {
+    info, err := os.Stat(input)
+    if err != nil {
+        return "", noop, err
+    }
+
+    if !info.IsDir() {
+        return input, noop, nil
+    }
+
+    videoPath, err := findFirstVideoFile(input)
+    if err != nil {
+        return "", noop, err
+    }
+    return videoPath, noop, nil
 }
 
 func resolveBDInfoSource(ctx context.Context, input string) (string, func(), error) {
@@ -200,6 +217,41 @@ func resolveBDInfoFromMountedISO(ctx context.Context, isoPath string) (string, f
     }
 
     return mountDir, cleanup, nil
+}
+
+func isVideoFile(path string) bool {
+    ext := strings.ToLower(filepath.Ext(path))
+    switch ext {
+    case ".m2ts", ".mts", ".mkv", ".mp4", ".m4v", ".mov", ".avi", ".wmv", ".flv",
+        ".mpg", ".mpeg", ".m2v", ".ts", ".vob", ".webm":
+        return true
+    default:
+        return false
+    }
+}
+
+func findFirstVideoFile(root string) (string, error) {
+    var first string
+    err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        if d.IsDir() {
+            return nil
+        }
+        if !isVideoFile(path) {
+            return nil
+        }
+        first = path
+        return errISOFound
+    })
+    if err != nil && !errors.Is(err, errISOFound) {
+        return "", err
+    }
+    if first == "" {
+        return "", errors.New("no video files found under path")
+    }
+    return first, nil
 }
 
 func mountISO(ctx context.Context, isoPath string) (string, func(), error) {

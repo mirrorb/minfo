@@ -1,15 +1,17 @@
-﻿package main
+package main
 
 import (
     "context"
     "errors"
     "fmt"
     "log"
+    "math/rand"
     "net/http"
     "os"
     "path/filepath"
     "strconv"
     "strings"
+    "time"
 )
 
 func infoHandler(envKey, fallback string) http.HandlerFunc {
@@ -40,6 +42,58 @@ func infoHandler(envKey, fallback string) http.HandlerFunc {
         defer cancel()
 
         stdout, stderr, err := runCommand(ctx, bin, path)
+        if err != nil {
+            writeError(w, http.StatusInternalServerError, bestErrorMessage(err, stderr, stdout))
+            return
+        }
+
+        output := strings.TrimSpace(stdout)
+        if strings.TrimSpace(stderr) != "" {
+            if output != "" {
+                output += "\n\n"
+            }
+            output += strings.TrimSpace(stderr)
+        }
+
+        writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
+    }
+}
+
+func mediainfoHandler(envKey, fallback string) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        if !ensurePost(w, r) {
+            return
+        }
+        if err := parseForm(w, r); err != nil {
+            writeError(w, http.StatusBadRequest, err.Error())
+            return
+        }
+        defer cleanupMultipart(r)
+
+        path, cleanup, err := inputPath(r)
+        if err != nil {
+            writeError(w, http.StatusBadRequest, err.Error())
+            return
+        }
+        defer cleanup()
+
+        bin, err := resolveBin(envKey, fallback)
+        if err != nil {
+            writeError(w, http.StatusBadRequest, err.Error())
+            return
+        }
+
+        ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
+        defer cancel()
+
+        sourcePath, sourceCleanup, err := resolveMediaInfoSource(ctx, path)
+        if err != nil {
+            writeError(w, http.StatusBadRequest, err.Error())
+            return
+        }
+        defer sourceCleanup()
+
+        stdout, stderr, err := runCommand(ctx, bin, sourcePath)
         if err != nil {
             writeError(w, http.StatusInternalServerError, bestErrorMessage(err, stderr, stdout))
             return
@@ -264,25 +318,54 @@ func captureShot(ctx context.Context, ffmpeg, path string, seconds float64, outP
 }
 
 func calcTimestamps(duration float64) []float64 {
-    positions := []float64{0.1, 0.3, 0.5, 0.7}
-    ts := make([]float64, 0, len(positions))
-    for i, p := range positions {
-        t := duration * p
+    const shots = 8
+    if duration <= 0 {
+        return nil
+    }
+
+    rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+    ts := make([]float64, 0, shots)
+    used := make(map[int]bool, shots)
+
+    step := duration / float64(shots+1)
+    maxT := duration - 0.2
+    if maxT < 0 {
+        maxT = duration
+    }
+
+    for i := 0; i < shots; i++ {
+        base := step * float64(i+1)
         if duration < 1 {
-            t = duration * (float64(i+1) / float64(len(positions)+1))
+            base = duration * (float64(i+1) / float64(shots+1))
         }
-        maxT := duration - 0.2
-        if maxT < 0 {
-            maxT = duration
+
+        jitter := step * 0.25
+        if jitter <= 0 {
+            jitter = duration * 0.05
         }
+        t := base + (rng.Float64()*2-1)*jitter
         if t > maxT {
             t = maxT
         }
         if t < 0 {
             t = 0
         }
+
+        key := int(t * 1000)
+        for tries := 0; tries < 10 && used[key]; tries++ {
+            t += 0.137
+            if t > maxT {
+                t = maxT - 0.137
+            }
+            if t < 0 {
+                t = 0
+            }
+            key = int(t * 1000)
+        }
+        used[key] = true
         ts = append(ts, t)
     }
+
     return ts
 }
 

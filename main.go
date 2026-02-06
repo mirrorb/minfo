@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
     "embed"
@@ -20,7 +20,7 @@ func main() {
 
     mux := http.NewServeMux()
     mux.Handle("/", http.FileServer(http.FS(sub)))
-    mux.HandleFunc("/api/mediainfo", infoHandler("MEDIAINFO_BIN", "mediainfo"))
+    mux.HandleFunc("/api/mediainfo", mediainfoHandler("MEDIAINFO_BIN", "mediainfo"))
     mux.HandleFunc("/api/bdinfo", bdinfoHandler("BDINFO_BIN", "bdinfo"))
     mux.HandleFunc("/api/screenshots", screenshotsHandler)
     mux.HandleFunc("/api/path", pathSuggestHandler)
