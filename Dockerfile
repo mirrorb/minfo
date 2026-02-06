@@ -60,10 +60,16 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
-        ffmpeg \
+        libav-tools \
         mediainfo \
         libgdiplus \
         util-linux; \
+    if ! command -v ffmpeg >/dev/null 2>&1 && command -v avconv >/dev/null 2>&1; then \
+        ln -sf "$(command -v avconv)" /usr/local/bin/ffmpeg; \
+    fi; \
+    if ! command -v ffprobe >/dev/null 2>&1 && command -v avprobe >/dev/null 2>&1; then \
+        ln -sf "$(command -v avprobe)" /usr/local/bin/ffprobe; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
 COPY --from=bdinfo-prebuilt /opt/bdinfo /opt/bdinfo
