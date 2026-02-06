@@ -1,4 +1,4 @@
-#!/bin/sh
+﻿#!/bin/sh
 set -eu
 
 if [ "$#" -lt 1 ]; then
@@ -11,6 +11,7 @@ case "$input" in
   /*) ;;
   *) input="$(pwd)/$input" ;;
 esac
+
 out_dir="$(mktemp -d)"
 log_file="$(mktemp)"
 
@@ -19,35 +20,25 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bdinfo_exe="/opt/bdinfo/BDinfoCli.0.7.3/BDInfo.exe"
+bdinfo_exe="/opt/bdinfo/BDInfo.exe"
 if [ ! -f "$bdinfo_exe" ]; then
-  bdinfo_exe="/opt/bdinfo/bdinfocli.exe"
+  bdinfo_exe="$(find /opt/bdinfo -maxdepth 4 -type f -name 'BDInfo.exe' | head -n 1)"
 fi
-if [ ! -f "$bdinfo_exe" ]; then
-  bdinfo_exe="$(find /opt/bdinfo -maxdepth 4 -type f \( -name 'BDInfo.exe' -o -name 'bdinfocli.exe' \) | head -n 1)"
-fi
-if [ -z "$bdinfo_exe" ]; then
+if [ -z "$bdinfo_exe" ] || [ ! -f "$bdinfo_exe" ]; then
   echo "bdinfo: BDInfo CLI not found under /opt/bdinfo" >&2
   exit 1
 fi
 
 args="${BDINFO_ARGS:-}"
 
-if printf '%s' "$bdinfo_exe" | grep -q "BDinfoCli.0.7.3"; then
-  # shellcheck disable=SC2086
-  if ! printf '1\nq\n' | mono "$bdinfo_exe" $args "$input" "$out_dir" >"$log_file" 2>&1; then
-    cat "$log_file" >&2
-    exit 1
-  fi
-else
-  # shellcheck disable=SC2086
-  if ! printf '1\n' | mono "$bdinfo_exe" $args "$input" "$out_dir" >"$log_file" 2>&1; then
-    cat "$log_file" >&2
-    exit 1
-  fi
+# Non-interactive scan; write report to temp directory
+# shellcheck disable=SC2086
+if ! mono "$bdinfo_exe" -w $args "$input" "$out_dir" >"$log_file" 2>&1; then
+  cat "$log_file" >&2
+  exit 1
 fi
 
-report="$(find "$out_dir" -maxdepth 1 -type f \( -iname 'BDINFO.*.txt' -o -iname 'bdinfo.full.txt' -o -iname '*.txt' -o -iname '*.log' -o -iname '*.bdinfo' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
+report="$(find "$out_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
 if [ -n "$report" ]; then
   cat "$report"
   exit 0

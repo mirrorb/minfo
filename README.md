@@ -22,8 +22,9 @@ Then use `/media/...` in the UI.
 The container image downloads and includes:
 - MediaInfo CLI
 - FFmpeg + FFprobe
-- BDInfo CLI (from Aniverse/bluray, Mono runtime)
 - util-linux (mount/umount for BDISO)
+- Mono (built from source)
+- BDInfoCLI-ng (built from source)
 
 Optional env overrides:
 - BDINFO_ARGS (extra flags passed to BDInfo CLI)
@@ -31,6 +32,16 @@ Optional env overrides:
 - WEB_PASSWORD (enable Basic Auth for the web UI)
 - MOUNT_BIN (override mount path)
 - UMOUNT_BIN (override umount path)
+
+## Web UI (Vite + Vue 3)
+Web UI source lives in `webui/`. The Docker build runs the Vite build and embeds the output into the Go binary. The embed directory is `webui/dist` (build output).
+
+Local build:
+```bash
+cd webui
+npm install
+npm run build
+```
 
 ## Requirements (local run)
 - MediaInfo CLI
@@ -47,6 +58,12 @@ If the binaries are not on PATH, set these environment variables:
 
 ## Run
 ```powershell
+# build web UI first
+cd webui
+npm install
+npm run build
+cd ..
+
 go run .
 ```
 Then open http://localhost:8080
@@ -61,6 +78,8 @@ GOOS=linux GOARCH=arm64 go build -o bin/minfo-arm64
 ```
 
 ## Notes
+- Docker build will compile Mono + BDInfoCLI-ng from source; it can take a long time on small machines.
+- You can override Mono/libgdiplus git refs with build args: `MONO_REF`, `LIBGDIPLUS_REF`.
 - Uploads are saved to a temporary file and removed after each request.
 - For very large files or disc folders, use the server path input.
 - BD screenshots: accepts BDMV folders or BDISO files. For a folder containing ISO files, the first ISO found is used.

@@ -46,13 +46,13 @@ body {
 .hero {
   display: grid;
   gap: 24px;
-  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-columns: 1fr;
   align-items: center;
 }
 
 .kicker {
-  text-transform: uppercase;
-  letter-spacing: 0.28em;
+  text-transform: none;
+  letter-spacing: 0.12em;
   font-size: 0.7rem;
   color: var(--muted);
   margin: 0 0 12px;
@@ -163,6 +163,12 @@ button.ghost {
   margin-bottom: 12px;
 }
 
+.output-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .output-header h2 {
   margin: 0;
   font-family: var(--font-display);
@@ -205,3 +211,4 @@ pre {
     padding: 32px 20px 48px;
   }
 }
+
