@@ -19,9 +19,9 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     ffmpeg \
-    libarchive-tools \
     mediainfo \
     mono-runtime \
+    util-linux \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
 COPY --from=bluray /tmp/bluray/tools/BDinfoCli.0.7.3 /opt/bdinfo/BDinfoCli.0.7.3

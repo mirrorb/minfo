@@ -8,6 +8,8 @@ docker compose up --build
 ```
 Then open http://localhost:8080
 
+For BDISO mounting, the container needs privileges. Add `privileged: true` (or SYS_ADMIN + loop devices) in `docker-compose.yml`.
+
 If you want to use the "server path" input, mount a host folder:
 ```yaml
 services:
@@ -21,13 +23,14 @@ The container image downloads and includes:
 - MediaInfo CLI
 - FFmpeg + FFprobe
 - BDInfo CLI (from Aniverse/bluray, Mono runtime)
-- libarchive (bsdtar) for BDISO screenshots
+- util-linux (mount/umount for BDISO)
 
 Optional env overrides:
 - BDINFO_ARGS (extra flags passed to BDInfo CLI)
 - MEDIA_ROOT (root path used by server-path autocomplete, default: `/media`)
 - WEB_PASSWORD (enable Basic Auth for the web UI)
-- BSDTAR_BIN (override bsdtar path for BDISO extraction)
+- MOUNT_BIN (override mount path)
+- UMOUNT_BIN (override umount path)
 
 ## Requirements (local run)
 - MediaInfo CLI
@@ -39,7 +42,8 @@ If the binaries are not on PATH, set these environment variables:
 - BDINFO_BIN
 - FFMPEG_BIN
 - FFPROBE_BIN
-- BSDTAR_BIN (required for BDISO screenshots)
+- MOUNT_BIN (required for BDISO screenshots)
+- UMOUNT_BIN (required for BDISO screenshots)
 
 ## Run
 ```powershell
@@ -60,3 +64,4 @@ GOOS=linux GOARCH=arm64 go build -o bin/minfo-arm64
 - Uploads are saved to a temporary file and removed after each request.
 - For very large files or disc folders, use the server path input.
 - BD screenshots: accepts BDMV folders or BDISO files. For a folder containing ISO files, the first ISO found is used.
+- BDInfo/screenshots on BDISO use loop mount (read-only on source).

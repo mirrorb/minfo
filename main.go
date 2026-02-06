@@ -4,39 +4,38 @@ import (
     "archive/zip"
     "bytes"
     "context"
-    "embed"
-    "encoding/base64"
-    "encoding/json"
-    "errors"
-    "fmt"
+	"embed"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
     "io"
     "io/fs"
     "log"
-    "net/http"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "regexp"
-    "strconv"
-    "strings"
-    "unicode/utf8"
-    "time"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+	"time"
 )
 
 const (
-    defaultPort    = "8080"
-    defaultRoot    = "/media"
-    maxUploadBytes = int64(8 << 30)
-    maxMemoryBytes = int64(32 << 20)
-    maxSuggestions = 200
-    infoTimeout    = 3 * time.Minute
-    shotTimeout    = 10 * time.Minute
+	defaultPort    = "8080"
+	defaultRoot    = "/media"
+	maxUploadBytes = int64(8 << 30)
+	maxMemoryBytes = int64(32 << 20)
+	maxSuggestions = 200
+	mountTimeout   = 30 * time.Second
+	umountTimeout  = 30 * time.Second
+	infoTimeout    = 3 * time.Minute
+	shotTimeout    = 10 * time.Minute
 )
 
 //go:embed static/*
 var staticFS embed.FS
-
-var bsdtarLineRe = regexp.MustCompile(`\s([0-9]+)\s[0-9]{4}-[0-9]{2}-[0-9]{2}\s[0-9]{2}:[0-9]{2}\s(.+)$`)
 
 type infoResponse struct {
     OK     bool   `json:"ok"`
@@ -59,12 +58,12 @@ func main() {
         log.Fatalf("failed to load static assets: %v", err)
     }
 
-    mux := http.NewServeMux()
-    mux.Handle("/", http.FileServer(http.FS(sub)))
-    mux.HandleFunc("/api/mediainfo", infoHandler("MEDIAINFO_BIN", "mediainfo"))
-    mux.HandleFunc("/api/bdinfo", infoHandler("BDINFO_BIN", "bdinfo"))
-    mux.HandleFunc("/api/screenshots", screenshotsHandler)
-    mux.HandleFunc("/api/path", pathSuggestHandler)
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.FS(sub)))
+	mux.HandleFunc("/api/mediainfo", infoHandler("MEDIAINFO_BIN", "mediainfo"))
+	mux.HandleFunc("/api/bdinfo", bdinfoHandler("BDINFO_BIN", "bdinfo"))
+	mux.HandleFunc("/api/screenshots", screenshotsHandler)
+	mux.HandleFunc("/api/path", pathSuggestHandler)
 
     server := &http.Server{
         Addr:    ":" + port,
@@ -76,7 +75,7 @@ func main() {
 }
 
 func infoHandler(envKey, fallback string) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
         if !ensurePost(w, r) {
             return
         }
@@ -117,7 +116,59 @@ func infoHandler(envKey, fallback string) http.HandlerFunc {
         }
 
         writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
-    }
+	}
+}
+
+func bdinfoHandler(envKey, fallback string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !ensurePost(w, r) {
+			return
+		}
+		if err := parseForm(w, r); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		defer cleanupMultipart(r)
+
+		path, cleanup, err := inputPath(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		defer cleanup()
+
+		bin, err := resolveBin(envKey, fallback)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
+		defer cancel()
+
+		bdPath, bdCleanup, err := resolveBDInfoSource(ctx, path)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		defer bdCleanup()
+
+		stdout, stderr, err := runCommand(ctx, bin, bdPath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, bestErrorMessage(err, stderr, stdout))
+			return
+		}
+
+		output := strings.TrimSpace(stdout)
+		if strings.TrimSpace(stderr) != "" {
+			if output != "" {
+				output += "\n\n"
+			}
+			output += strings.TrimSpace(stderr)
+		}
+
+		writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
+	}
 }
 
 func screenshotsHandler(w http.ResponseWriter, r *http.Request) {
@@ -368,30 +419,73 @@ func resolveScreenshotSource(ctx context.Context, input string) (string, func(),
         return "", noop, err
     }
 
-    if !info.IsDir() {
-        if isISOFile(input) {
-            return extractLargestM2TSFromISO(ctx, input)
-        }
-        return input, noop, nil
-    }
+	if !info.IsDir() {
+		if isISOFile(input) {
+			return resolveM2TSFromMountedISO(ctx, input)
+		}
+		return input, noop, nil
+	}
 
-    if bdmvRoot, ok := resolveBDMVRoot(input); ok {
-        m2ts, err := findLargestM2TS(bdmvRoot)
-        if err != nil {
-            return "", noop, err
-        }
-        return m2ts, noop, nil
-    }
+	if bdmvRoot, ok := resolveBDMVRoot(input); ok {
+		m2ts, err := findLargestM2TS(bdmvRoot)
+		if err != nil {
+			return "", noop, err
+		}
+		return m2ts, noop, nil
+	}
 
-    isoPath, err := findISOInDir(input)
-    if err == nil {
-        return extractLargestM2TSFromISO(ctx, isoPath)
-    }
+	isoPath, err := findISOInDir(input)
+	if err == nil {
+		return resolveM2TSFromMountedISO(ctx, isoPath)
+	}
     if !errors.Is(err, errNoISO) {
         return "", noop, err
     }
 
-    return "", noop, errors.New("path does not contain BDMV or BDISO content")
+	return "", noop, errors.New("path does not contain BDMV or BDISO content")
+}
+
+func resolveBDInfoSource(ctx context.Context, input string) (string, func(), error) {
+	info, err := os.Stat(input)
+	if err != nil {
+		return "", noop, err
+	}
+
+	if !info.IsDir() {
+		if isISOFile(input) {
+			return resolveBDInfoFromMountedISO(ctx, input)
+		}
+		return input, noop, nil
+	}
+
+	if bdmvRoot, ok := resolveBDInfoRoot(input); ok {
+		return bdmvRoot, noop, nil
+	}
+
+	isoPath, err := findISOInDir(input)
+	if err == nil {
+		return resolveBDInfoFromMountedISO(ctx, isoPath)
+	}
+	if !errors.Is(err, errNoISO) {
+		return "", noop, err
+	}
+
+	return "", noop, errors.New("path does not contain BDMV or BDISO content")
+}
+
+func resolveBDInfoRoot(path string) (string, bool) {
+	base := filepath.Base(path)
+	if strings.EqualFold(base, "BDMV") {
+		return path, true
+	}
+	if strings.EqualFold(base, "STREAM") {
+		return filepath.Dir(path), true
+	}
+	bdmv := filepath.Join(path, "BDMV")
+	if info, err := os.Stat(bdmv); err == nil && info.IsDir() {
+		return bdmv, true
+	}
+	return "", false
 }
 
 func resolveBDMVRoot(path string) (string, bool) {
@@ -479,89 +573,79 @@ func findLargestM2TS(root string) (string, error) {
     return largestPath, nil
 }
 
-func extractLargestM2TSFromISO(ctx context.Context, isoPath string) (string, func(), error) {
-    bsdtar, err := resolveBin("BSDTAR_BIN", "bsdtar")
+func resolveM2TSFromMountedISO(ctx context.Context, isoPath string) (string, func(), error) {
+    mountDir, cleanup, err := mountISO(ctx, isoPath)
     if err != nil {
         return "", noop, err
     }
 
-    streamPath, err := findLargestISOStream(ctx, bsdtar, isoPath)
+    bdmvRoot, ok := resolveBDMVRoot(mountDir)
+    if !ok {
+        cleanup()
+        return "", noop, errors.New("BDMV folder not found in ISO")
+    }
+
+    m2ts, err := findLargestM2TS(bdmvRoot)
+    if err != nil {
+        cleanup()
+        return "", noop, err
+    }
+
+    return m2ts, cleanup, nil
+}
+
+func resolveBDInfoFromMountedISO(ctx context.Context, isoPath string) (string, func(), error) {
+    mountDir, cleanup, err := mountISO(ctx, isoPath)
     if err != nil {
         return "", noop, err
     }
 
-    tempDir, err := os.MkdirTemp("", "minfo-iso-*")
+    if _, ok := resolveBDInfoRoot(mountDir); !ok {
+        cleanup()
+        return "", noop, errors.New("BDMV folder not found in ISO")
+    }
+
+    return mountDir, cleanup, nil
+}
+
+func mountISO(ctx context.Context, isoPath string) (string, func(), error) {
+    mountBin, err := resolveBin("MOUNT_BIN", "mount")
+    if err != nil {
+        return "", noop, err
+    }
+    umountBin, err := resolveBin("UMOUNT_BIN", "umount")
     if err != nil {
         return "", noop, err
     }
 
-    _, stderr, err := runCommand(ctx, bsdtar, "-xf", isoPath, "-C", tempDir, streamPath)
+    mountDir, err := os.MkdirTemp("", "minfo-iso-mount-*")
     if err != nil {
-        _ = os.RemoveAll(tempDir)
+        return "", noop, err
+    }
+
+    mountCtx, cancel := context.WithTimeout(ctx, mountTimeout)
+    defer cancel()
+
+    _, stderr, err := runCommand(mountCtx, mountBin, "-o", "loop,ro", isoPath, mountDir)
+    if err != nil {
+        _ = os.RemoveAll(mountDir)
         msg := strings.TrimSpace(stderr)
         if msg == "" {
             msg = err.Error()
         }
-        return "", noop, fmt.Errorf("extract iso failed: %s", msg)
-    }
-
-    extracted := filepath.Join(tempDir, filepath.FromSlash(strings.TrimPrefix(streamPath, "./")))
-    if _, err := os.Stat(extracted); err != nil {
-        _ = os.RemoveAll(tempDir)
-        return "", noop, fmt.Errorf("extracted m2ts not found: %v", err)
+        return "", noop, fmt.Errorf("mount iso failed: %s", msg)
     }
 
     cleanup := func() {
-        _ = os.RemoveAll(tempDir)
-    }
-
-    return extracted, cleanup, nil
-}
-
-func findLargestISOStream(ctx context.Context, bsdtar, isoPath string) (string, error) {
-    stdout, stderr, err := runCommand(ctx, bsdtar, "-tvf", isoPath)
-    if err != nil {
-        return "", fmt.Errorf("bsdtar list failed: %s", bestErrorMessage(err, stderr, stdout))
-    }
-
-    var largestPath string
-    var largestSize int64
-
-    for _, line := range strings.Split(stdout, "\n") {
-        path, size, ok := parseBSDTarLine(line)
-        if !ok {
-            continue
+        umountCtx, cancel := context.WithTimeout(context.Background(), umountTimeout)
+        defer cancel()
+        if _, _, err := runCommand(umountCtx, umountBin, mountDir); err != nil {
+            _, _, _ = runCommand(umountCtx, umountBin, "-l", mountDir)
         }
-        lower := strings.ToLower(path)
-        if !strings.Contains(lower, "bdmv/stream/") || !strings.HasSuffix(lower, ".m2ts") {
-            continue
-        }
-        if size > largestSize {
-            largestSize = size
-            largestPath = path
-        }
+        _ = os.RemoveAll(mountDir)
     }
 
-    if largestPath == "" {
-        return "", errors.New("no BDMV/STREAM m2ts found in ISO")
-    }
-    return largestPath, nil
-}
-
-func parseBSDTarLine(line string) (string, int64, bool) {
-    matches := bsdtarLineRe.FindStringSubmatch(line)
-    if len(matches) != 3 {
-        return "", 0, false
-    }
-    size, err := strconv.ParseInt(matches[1], 10, 64)
-    if err != nil {
-        return "", 0, false
-    }
-    path := strings.TrimSpace(matches[2])
-    if path == "" {
-        return "", 0, false
-    }
-    return path, size, true
+    return mountDir, cleanup, nil
 }
 
 func zipFiles(paths []string) ([]byte, error) {
