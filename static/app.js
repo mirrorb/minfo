@@ -1,5 +1,6 @@
-﻿const fileInput = document.getElementById("file");
+const fileInput = document.getElementById("file");
 const pathInput = document.getElementById("path");
+const pathList = document.getElementById("path-list");
 const output = document.getElementById("output");
 const btnMediaInfo = document.getElementById("btn-mediainfo");
 const btnBdInfo = document.getElementById("btn-bdinfo");
@@ -7,6 +8,9 @@ const btnShots = document.getElementById("btn-shots");
 const btnClear = document.getElementById("btn-clear");
 
 const buttons = [btnMediaInfo, btnBdInfo, btnShots];
+let suggestTimer = null;
+let suggestController = null;
+let lastSuggest = null;
 
 function hasInput() {
   return (fileInput.files && fileInput.files.length > 0) || pathInput.value.trim() !== "";
@@ -27,6 +31,52 @@ function appendOutput(text) {
 
 function errorOutput(message) {
   output.textContent = `Error: ${message}`;
+}
+
+function scheduleSuggest() {
+  if (!pathInput || !pathList) {
+    return;
+  }
+  clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(() => {
+    suggestPaths(pathInput.value.trim());
+  }, 200);
+}
+
+async function suggestPaths(prefix) {
+  if (prefix === lastSuggest) {
+    return;
+  }
+  lastSuggest = prefix;
+  if (suggestController) {
+    suggestController.abort();
+  }
+  suggestController = new AbortController();
+
+  try {
+    const url = new URL("/api/path", window.location.origin);
+    if (prefix !== "") {
+      url.searchParams.set("prefix", prefix);
+    }
+    const res = await fetch(url.toString(), { signal: suggestController.signal });
+    if (!res.ok) {
+      return;
+    }
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.items)) {
+      return;
+    }
+    pathList.innerHTML = "";
+    data.items.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item;
+      pathList.appendChild(option);
+    });
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      return;
+    }
+  }
 }
 
 async function postForm(url) {
@@ -96,3 +146,5 @@ btnMediaInfo.addEventListener("click", () => runInfo("/api/mediainfo", "MediaInf
 btnBdInfo.addEventListener("click", () => runInfo("/api/bdinfo", "BDInfo"));
 btnShots.addEventListener("click", downloadShots);
 btnClear.addEventListener("click", () => appendOutput("Ready."));
+pathInput.addEventListener("input", scheduleSuggest);
+pathInput.addEventListener("focus", scheduleSuggest);

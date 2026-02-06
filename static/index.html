@@ -29,7 +29,9 @@
       </div>
       <div class="field">
         <label for="path">Server path (optional)</label>
-        <input id="path" type="text" placeholder="/media/movie.mkv" />
+        <input id="path" type="text" list="path-list" placeholder="/media/movie.mkv" />
+        <datalist id="path-list"></datalist>
+        <p class="hint">Start typing to autocomplete under MEDIA_ROOT (default: /media).</p>
       </div>
       <div class="actions">
         <button id="btn-mediainfo">Generate MediaInfo</button>

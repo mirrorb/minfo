@@ -24,6 +24,7 @@ The container image downloads and includes:
 
 Optional env overrides:
 - BDINFO_ARGS (defaults to `-w`)
+- MEDIA_ROOT (root path used by server-path autocomplete, default: `/media`)
 
 ## Requirements (local run)
 - MediaInfo CLI

@@ -22,8 +22,10 @@ import (
 
 const (
     defaultPort    = "8080"
+    defaultRoot    = "/media"
     maxUploadBytes = int64(8 << 30)
     maxMemoryBytes = int64(32 << 20)
+    maxSuggestions = 200
     infoTimeout    = 3 * time.Minute
     shotTimeout    = 10 * time.Minute
 )
@@ -35,6 +37,13 @@ type infoResponse struct {
     OK     bool   `json:"ok"`
     Output string `json:"output,omitempty"`
     Error  string `json:"error,omitempty"`
+}
+
+type pathResponse struct {
+    OK    bool     `json:"ok"`
+    Root  string   `json:"root,omitempty"`
+    Items []string `json:"items,omitempty"`
+    Error string   `json:"error,omitempty"`
 }
 
 func main() {
@@ -50,6 +59,7 @@ func main() {
     mux.HandleFunc("/api/mediainfo", infoHandler("MEDIAINFO_BIN", "mediainfo"))
     mux.HandleFunc("/api/bdinfo", infoHandler("BDINFO_BIN", "bdinfo"))
     mux.HandleFunc("/api/screenshots", screenshotsHandler)
+    mux.HandleFunc("/api/path", pathSuggestHandler)
 
     server := &http.Server{
         Addr:    ":" + port,
@@ -172,6 +182,29 @@ func screenshotsHandler(w http.ResponseWriter, r *http.Request) {
     if _, err := w.Write(zipBytes); err != nil {
         log.Printf("write response: %v", err)
     }
+}
+
+func pathSuggestHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodGet {
+        writePathError(w, http.StatusMethodNotAllowed, "method not allowed")
+        return
+    }
+
+    root := mediaRoot()
+    prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
+    prefix = strings.Trim(prefix, "\"")
+
+    items, err := suggestPaths(root, prefix, maxSuggestions)
+    if err != nil {
+        writePathError(w, http.StatusBadRequest, err.Error())
+        return
+    }
+
+    writePathJSON(w, http.StatusOK, pathResponse{
+        OK:    true,
+        Root:  root,
+        Items: items,
+    })
 }
 
 func parseForm(w http.ResponseWriter, r *http.Request) error {
@@ -388,6 +421,16 @@ func writeError(w http.ResponseWriter, status int, msg string) {
     writeJSON(w, status, infoResponse{OK: false, Error: msg})
 }
 
+func writePathJSON(w http.ResponseWriter, status int, payload pathResponse) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    _ = json.NewEncoder(w).Encode(payload)
+}
+
+func writePathError(w http.ResponseWriter, status int, msg string) {
+    writePathJSON(w, status, pathResponse{OK: false, Error: msg})
+}
+
 func bestErrorMessage(err error, stderr, stdout string) string {
     msg := strings.TrimSpace(stderr)
     if msg == "" {
@@ -413,6 +456,83 @@ func getenv(key, fallback string) string {
         return fallback
     }
     return value
+}
+
+func mediaRoot() string {
+    root := strings.TrimSpace(os.Getenv("MEDIA_ROOT"))
+    if root == "" {
+        return defaultRoot
+    }
+    return root
+}
+
+func suggestPaths(root, prefix string, limit int) ([]string, error) {
+    root = filepath.Clean(root)
+    rootAbs, err := filepath.Abs(root)
+    if err != nil {
+        return nil, err
+    }
+
+    if prefix == "" {
+        return listDir(rootAbs, "", limit)
+    }
+
+    cleaned := filepath.Clean(prefix)
+    var absPrefix string
+    if filepath.IsAbs(cleaned) {
+        absPrefix = cleaned
+    } else {
+        absPrefix = filepath.Join(rootAbs, cleaned)
+    }
+
+    sep := string(filepath.Separator)
+    if strings.HasSuffix(prefix, sep) || strings.HasSuffix(prefix, "/") {
+        if !isSubpath(rootAbs, absPrefix) {
+            return nil, errors.New("path is outside MEDIA_ROOT")
+        }
+        return listDir(absPrefix, "", limit)
+    }
+
+    dir := filepath.Dir(absPrefix)
+    base := filepath.Base(absPrefix)
+    if !isSubpath(rootAbs, dir) {
+        return nil, errors.New("path is outside MEDIA_ROOT")
+    }
+    return listDir(dir, base, limit)
+}
+
+func listDir(dir, base string, limit int) ([]string, error) {
+    entries, err := os.ReadDir(dir)
+    if err != nil {
+        return nil, err
+    }
+
+    baseLower := strings.ToLower(base)
+    items := make([]string, 0, len(entries))
+    for _, entry := range entries {
+        name := entry.Name()
+        if baseLower != "" && !strings.HasPrefix(strings.ToLower(name), baseLower) {
+            continue
+        }
+        full := filepath.Join(dir, name)
+        if entry.IsDir() {
+            full += string(filepath.Separator)
+        }
+        items = append(items, full)
+        if limit > 0 && len(items) >= limit {
+            break
+        }
+    }
+
+    return items, nil
+}
+
+func isSubpath(root, path string) bool {
+    rel, err := filepath.Rel(root, path)
+    if err != nil {
+        return false
+    }
+    return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
 
 func noop() {}
