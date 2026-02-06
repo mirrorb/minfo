@@ -32,6 +32,15 @@ fi
 args="${BDINFO_ARGS:-}"
 
 if [ "${bdinfo_bin##*.}" = "exe" ]; then
+  bdinfo_dir="$(dirname "$bdinfo_bin")"
+  mono_path=""
+  if command -v find >/dev/null 2>&1; then
+    mono_path="$(find /opt/bdinfo -type f -name '*.dll' -printf '%h\n' 2>/dev/null | sort -u | tr '\n' ':' | sed 's/:$//')"
+  fi
+  if [ -n "$mono_path" ]; then
+    export MONO_PATH="$mono_path${MONO_PATH:+:$MONO_PATH}"
+  fi
+  cd "$bdinfo_dir"
   # shellcheck disable=SC2086
   if ! mono "$bdinfo_bin" $args "$input" "$out_dir" >"$log_file" 2>&1; then
     cat "$log_file" >&2
