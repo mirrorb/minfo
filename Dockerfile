@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     mediainfo \
     mono-runtime \
+    libmono-system-windows-forms4.0-cil \
+    libgdiplus \
     util-linux \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
