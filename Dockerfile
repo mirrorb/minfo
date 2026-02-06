@@ -20,6 +20,7 @@ ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
 FROM debian:bookworm-slim AS bdinfo-src
+ARG NUGET_EXE_URL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
