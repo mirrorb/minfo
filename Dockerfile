@@ -1,4 +1,4 @@
-ARG RUNTIME_MONO_TAG=latest
+ARG RUNTIME_MONO_TAG=5.12.0.226
 ARG BDINFO_IMAGE=zoffline/bdinfocli-ng
 ARG BDINFO_DIR=/opt/bdinfo
 
