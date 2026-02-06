@@ -52,10 +52,7 @@ func resolveBDInfoSource(ctx context.Context, input string) (string, func(), err
     }
 
     if !info.IsDir() {
-        if isISOFile(input) {
-            return resolveBDInfoFromMountedISO(ctx, input)
-        }
-        return input, noop, nil
+        return "", noop, errors.New("path must be a folder containing BDMV or ISO")
     }
 
     if bdmvRoot, ok := resolveBDInfoRoot(input); ok {
