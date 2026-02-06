@@ -1,6 +1,6 @@
-ARG MONO_TAG=5.12.0.226
 ARG RUNTIME_MONO_TAG=latest
-ARG NUGET_EXE_URL=https://dist.nuget.org/win-x86-commandline/v4.3.0/nuget.exe
+ARG BDINFO_IMAGE=zoffline/bdinfocli-ng
+ARG BDINFO_DIR=/opt/bdinfo
 
 FROM node:20-bookworm-slim AS webui
 WORKDIR /app
@@ -19,29 +19,23 @@ ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
-FROM debian:bookworm-slim AS bdinfo-src
-ARG NUGET_EXE_URL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/zoffline/BDInfoCLI-ng.git /tmp/bdinfo
-RUN curl -fsSL -o /tmp/nuget.exe "$NUGET_EXE_URL"
-
-FROM mono:${MONO_TAG} AS bdinfo-build
-COPY --from=bdinfo-src /etc/ssl/certs /etc/ssl/certs
-COPY --from=bdinfo-src /tmp/bdinfo /tmp/bdinfo
-COPY --from=bdinfo-src /tmp/nuget.exe /tmp/nuget.exe
-WORKDIR /tmp/bdinfo
-RUN mono /tmp/nuget.exe restore BDInfo.sln -Source https://www.nuget.org/api/v2/
-RUN if command -v msbuild >/dev/null 2>&1; then msbuild BDInfo.sln /p:Configuration=Release; else xbuild /p:Configuration=Release BDInfo.sln; fi
+FROM ${BDINFO_IMAGE} AS bdinfo-prebuilt
+ARG BDINFO_DIR
 RUN set -eux; \
-    bdinfo_exe="$(find /tmp/bdinfo -type f -name 'BDInfo.exe' -path '*bin/Release*' | head -n 1)"; \
-    if [ -z "$bdinfo_exe" ]; then echo "BDInfo.exe not found"; exit 1; fi; \
-    bdinfo_dir="$(dirname "$bdinfo_exe")"; \
-    mkdir -p /opt/bdinfo; \
-    cp -r "$bdinfo_dir"/. /opt/bdinfo/
+    if [ -d "$BDINFO_DIR" ]; then \
+        mkdir -p /opt/bdinfo; \
+        cp -r "$BDINFO_DIR"/. /opt/bdinfo/; \
+    else \
+        if ! command -v find >/dev/null 2>&1; then \
+            echo "find not available; set BDINFO_DIR to the BDInfo directory inside the image" >&2; \
+            exit 1; \
+        fi; \
+        bdinfo_exe="$(find / -type f -name 'BDInfo.exe' 2>/dev/null | head -n 1)"; \
+        if [ -z "$bdinfo_exe" ]; then echo "BDInfo.exe not found; set BDINFO_DIR" >&2; exit 1; fi; \
+        bdinfo_dir="$(dirname "$bdinfo_exe")"; \
+        mkdir -p /opt/bdinfo; \
+        cp -r "$bdinfo_dir"/. /opt/bdinfo/; \
+    fi
 
 FROM mono:${RUNTIME_MONO_TAG}
 RUN set -eux; \
@@ -62,7 +56,7 @@ RUN set -eux; \
         util-linux; \
     rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/minfo /usr/local/bin/minfo
-COPY --from=bdinfo-build /opt/bdinfo /opt/bdinfo
+COPY --from=bdinfo-prebuilt /opt/bdinfo /opt/bdinfo
 COPY bdinfo.sh /usr/local/bin/bdinfo
 RUN chmod +x /usr/local/bin/bdinfo
 ENV BDINFO_BIN=/usr/local/bin/bdinfo
