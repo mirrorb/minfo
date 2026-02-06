@@ -1,7 +1,6 @@
 services:
   minfo:
     build: .
-    mem_limit: "1g"
     privileged: true
     ports:
       - "28081:8080"
