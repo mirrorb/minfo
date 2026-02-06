@@ -1,6 +1,7 @@
 ARG BDINFO_REPO=https://github.com/dotnetcorecorner/BDInfo.git
 ARG BDINFO_REF=master
 ARG RUNTIME_BASE=debian:bookworm-slim
+ARG DOTNET_SDK_TAG=9.0-bookworm-slim
 
 FROM node:20-bookworm-slim AS webui
 WORKDIR /app
@@ -19,7 +20,6 @@ ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
 
-ARG DOTNET_SDK_TAG=9.0-bookworm-slim
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_TAG} AS bdinfo-build
 ARG BDINFO_REPO
 ARG BDINFO_REF
