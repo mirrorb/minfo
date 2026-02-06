@@ -33,8 +33,18 @@ RUN set -eux; \
         bdinfo_exe="$(find / -type f -name 'BDInfo.exe' 2>/dev/null | head -n 1)"; \
         if [ -z "$bdinfo_exe" ]; then echo "BDInfo.exe not found; set BDINFO_DIR" >&2; exit 1; fi; \
         bdinfo_dir="$(dirname "$bdinfo_exe")"; \
+        bdinfo_root="$bdinfo_dir"; \
+        while [ "$bdinfo_root" != "/" ]; do \
+            if [ -f "$bdinfo_root/BDInfo.sln" ] || [ -d "$bdinfo_root/packages" ]; then \
+                break; \
+            fi; \
+            bdinfo_root="$(dirname "$bdinfo_root")"; \
+        done; \
+        if [ "$bdinfo_root" = "/" ]; then \
+            bdinfo_root="$bdinfo_dir"; \
+        fi; \
         mkdir -p /opt/bdinfo; \
-        cp -r "$bdinfo_dir"/. /opt/bdinfo/; \
+        cp -r "$bdinfo_root"/. /opt/bdinfo/; \
     fi
 
 FROM mono:${RUNTIME_MONO_TAG}
