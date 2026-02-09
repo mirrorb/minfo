@@ -77,6 +77,8 @@ RUN set -eux; \
     chmod +x /usr/local/bin/bdinfo; \
     if [ -f /opt/bdinfo/BDInfo ]; then chmod +x /opt/bdinfo/BDInfo; fi
 ENV BDINFO_BIN=/usr/local/bin/bdinfo
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 ENV PORT=8080
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/minfo"]
