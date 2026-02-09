@@ -84,327 +84,347 @@
     </main>
 </template>
 
-<script>
-export default {
-    data() {
-        return {
-            path: "",
-            output: "就绪。",
-            busy: false,
-            suggestions: [],
-            copyLabel: "复制",
-            suggestTimer: null,
-            suggestController: null,
-            lastSuggest: null,
-            showSuggestions: false,
-            activeIndex: -1,
-        };
-    },
-    computed: {
-        filteredSuggestions() {
-            const query = this.path.trim();
-            if (query === "") {
-                return this.suggestions.slice(0, 12).map((value) => ({
-                    value,
-                    score: 0,
-                    segments: [{ text: value, match: false }],
-                }));
-            }
+<script setup>
+import { computed, onBeforeUnmount, ref } from "vue";
 
-            const items = [];
-            for (const value of this.suggestions) {
-                const positions = this.matchPositions(value, query);
-                if (!positions) {
-                    continue;
-                }
-                items.push({
-                    value,
-                    score: this.scoreMatch(positions, value),
-                    segments: this.buildSegments(value, positions),
-                });
-            }
+const path = ref("");
+const output = ref("就绪。");
+const busy = ref(false);
+const suggestions = ref([]);
+const copyLabel = ref("复制");
+const showSuggestions = ref(false);
+const activeIndex = ref(-1);
 
-            items.sort((a, b) => {
-                if (b.score !== a.score) {
-                    return b.score - a.score;
-                }
-                return a.value.length - b.value.length;
-            });
-            return items.slice(0, 12);
-        },
-    },
-    methods: {
-        hasInput() {
-            return this.path.trim() !== "";
-        },
-        handleInput() {
-            this.activeIndex = -1;
-            this.showSuggestions = true;
-            this.scheduleSuggest();
-        },
-        handleFocus() {
-            this.showSuggestions = true;
-            this.scheduleSuggest();
-        },
-        handleBlur() {
-            setTimeout(() => {
-                this.showSuggestions = false;
-                this.activeIndex = -1;
-            }, 120);
-        },
-        handleKeydown(event) {
-            if (!this.showSuggestions) {
-                return;
-            }
-            const list = this.filteredSuggestions;
-            if (event.key === "ArrowDown") {
-                event.preventDefault();
-                if (list.length === 0) {
-                    return;
-                }
-                this.activeIndex = (this.activeIndex + 1) % list.length;
-            } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                if (list.length === 0) {
-                    return;
-                }
-                this.activeIndex = (this.activeIndex - 1 + list.length) % list.length;
-            } else if (event.key === "Enter") {
-                if (this.activeIndex >= 0 && this.activeIndex < list.length) {
-                    event.preventDefault();
-                    this.selectSuggestion(list[this.activeIndex].value);
-                }
-            } else if (event.key === "Escape") {
-                this.showSuggestions = false;
-                this.activeIndex = -1;
-            }
-        },
-        clearPath() {
-            this.path = "";
-            this.showSuggestions = false;
-            this.activeIndex = -1;
-            this.suggestions = [];
-        },
-        selectSuggestion(value) {
-            this.path = value;
-            this.showSuggestions = false;
-            this.activeIndex = -1;
-        },
-        matchPositions(value, query) {
-            const v = value.toLowerCase();
-            const q = query.toLowerCase();
-            const positions = [];
-            let index = 0;
-            for (const ch of q) {
-                const found = v.indexOf(ch, index);
-                if (found === -1) {
-                    return null;
-                }
-                positions.push(found);
-                index = found + 1;
-            }
-            return positions;
-        },
-        scoreMatch(positions, value) {
-            if (!positions || positions.length === 0) {
-                return 0;
-            }
-            const length = value.length;
-            let score = positions.length;
-            for (let i = 1; i < positions.length; i++) {
-                if (positions[i] === positions[i - 1] + 1) {
-                    score += 3;
-                } else {
-                    score += 1;
-                }
-            }
-            for (const pos of positions) {
-                if (pos === 0) {
-                    score += 3;
-                } else {
-                    const prev = pos - 1;
-                    if (prev >= 0 && prev < length && this.isBoundary(value[prev])) {
-                        score += 2;
-                    }
-                }
-            }
-            score += Math.max(0, 30 - positions[0]);
-            return score;
-        },
-        isBoundary(ch) {
-            return ch === "/" || ch === "\\" || ch === "_" || ch === "-" || ch === " ";
-        },
-        buildSegments(value, positions) {
-            const segments = [];
-            const posSet = new Set(positions);
-            let current = "";
-            let currentMatch = posSet.has(0);
-            for (let i = 0; i < value.length; i++) {
-                const isMatch = posSet.has(i);
-                if (isMatch !== currentMatch && current !== "") {
-                    segments.push({ text: current, match: currentMatch });
-                    current = "";
-                }
-                currentMatch = isMatch;
-                current += value[i];
-            }
-            if (current !== "") {
-                segments.push({ text: current, match: currentMatch });
-            }
-            return segments;
-        },
-        setBusy(isBusy, label) {
-            this.busy = isBusy;
-            if (label) {
-                this.output = label;
-            }
-        },
-        appendOutput(text) {
-            this.output = text;
-        },
-        errorOutput(message) {
-            this.output = `错误：${message}`;
-        },
-        scheduleSuggest() {
-            if (this.suggestTimer) {
-                clearTimeout(this.suggestTimer);
-            }
-            this.suggestTimer = setTimeout(() => {
-                this.suggestPaths(this.path.trim());
-            }, 200);
-        },
-        async suggestPaths(prefix) {
-            if (prefix === this.lastSuggest) {
-                return;
-            }
-            this.lastSuggest = prefix;
-            if (this.suggestController) {
-                this.suggestController.abort();
-            }
-            this.suggestController = new AbortController();
+let suggestTimer = null;
+let suggestController = null;
+let lastSuggest = null;
 
-            try {
-                const url = new URL("/api/path", window.location.origin);
-                if (prefix !== "") {
-                    url.searchParams.set("prefix", prefix);
-                }
-                const res = await fetch(url.toString(), { signal: this.suggestController.signal });
-                if (!res.ok) {
-                    return;
-                }
-                const data = await res.json();
-                if (!data.ok || !Array.isArray(data.items)) {
-                    return;
-                }
-                this.suggestions = data.items;
-            } catch (err) {
-                if (err && err.name === "AbortError") {
-                    return;
-                }
-            }
-        },
-        async postForm(url) {
-            const form = new FormData();
-            const path = this.path.trim();
-            if (path !== "") {
-                form.append("path", path);
-            }
-            return fetch(url, { method: "POST", body: form });
-        },
-        async runInfo(url, label) {
-            if (!this.hasInput()) {
-                this.errorOutput("请先填写媒体路径。");
-                return;
-            }
-            try {
-                this.setBusy(true, `${label} 生成中...`);
-                const res = await this.postForm(url);
-                let data = {};
-                try {
-                    data = await res.json();
-                } catch (err) {
-                    data = {};
-                }
-                if (!res.ok || !data.ok) {
-                    throw new Error(data.error || "请求失败。");
-                }
-                this.appendOutput(data.output || "没有输出。");
-            } catch (err) {
-                this.errorOutput(err && err.message ? err.message : "请求失败。");
-            } finally {
-                this.setBusy(false);
-            }
-        },
-        async downloadShots() {
-            if (!this.hasInput()) {
-                this.errorOutput("请先填写媒体路径。");
-                return;
-            }
-            try {
-                this.setBusy(true, "正在生成截图...");
-                const res = await this.postForm("/api/screenshots");
-                const contentType = res.headers.get("content-type") || "";
-                if (!res.ok || !contentType.includes("application/zip")) {
-                    let data = {};
-                    try {
-                        data = await res.json();
-                    } catch (err) {
-                        data = {};
-                    }
-                    throw new Error(data.error || "截图请求失败。");
-                }
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "screenshots.zip";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                this.appendOutput("截图已下载为 screenshots.zip。");
-            } catch (err) {
-                this.errorOutput(err && err.message ? err.message : "截图请求失败。");
-            } finally {
-                this.setBusy(false);
-            }
-        },
-        clearOutput() {
-            if (this.busy) {
-                return;
-            }
-            this.appendOutput("就绪。");
-        },
-        async copyOutput() {
-            const text = this.output || "";
-            if (text.trim() === "") {
-                this.errorOutput("没有可复制的内容。");
-                return;
-            }
+const filteredSuggestions = computed(() => {
+    const query = path.value.trim();
+    if (query === "") {
+        return suggestions.value.slice(0, 12).map((value) => ({
+            value,
+            score: 0,
+            segments: [{ text: value, match: false }],
+        }));
+    }
 
-            try {
-                await navigator.clipboard.writeText(text);
-            } catch (err) {
-                const textarea = document.createElement("textarea");
-                textarea.value = text;
-                textarea.setAttribute("readonly", "");
-                textarea.style.position = "absolute";
-                textarea.style.left = "-9999px";
-                document.body.appendChild(textarea);
-                textarea.select();
-                try {
-                    document.execCommand("copy");
-                } finally {
-                    textarea.remove();
-                }
-            }
+    const items = [];
+    for (const value of suggestions.value) {
+        const positions = matchPositions(value, query);
+        if (!positions) {
+            continue;
+        }
+        items.push({
+            value,
+            score: scoreMatch(positions, value),
+            segments: buildSegments(value, positions),
+        });
+    }
 
-            const original = this.copyLabel;
-            this.copyLabel = "已复制";
-            setTimeout(() => {
-                this.copyLabel = original;
-            }, 1200);
-        },
-    },
+    items.sort((a, b) => {
+        if (b.score !== a.score) {
+            return b.score - a.score;
+        }
+        return a.value.length - b.value.length;
+    });
+    return items.slice(0, 12);
+});
+
+const hasInput = () => path.value.trim() !== "";
+
+const handleInput = () => {
+    activeIndex.value = -1;
+    showSuggestions.value = true;
+    scheduleSuggest();
 };
+
+const handleFocus = () => {
+    showSuggestions.value = true;
+    scheduleSuggest();
+};
+
+const handleBlur = () => {
+    setTimeout(() => {
+        showSuggestions.value = false;
+        activeIndex.value = -1;
+    }, 120);
+};
+
+const handleKeydown = (event) => {
+    if (!showSuggestions.value) {
+        return;
+    }
+    const list = filteredSuggestions.value;
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (list.length === 0) {
+            return;
+        }
+        activeIndex.value = (activeIndex.value + 1) % list.length;
+    } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (list.length === 0) {
+            return;
+        }
+        activeIndex.value = (activeIndex.value - 1 + list.length) % list.length;
+    } else if (event.key === "Enter") {
+        if (activeIndex.value >= 0 && activeIndex.value < list.length) {
+            event.preventDefault();
+            selectSuggestion(list[activeIndex.value].value);
+        }
+    } else if (event.key === "Escape") {
+        showSuggestions.value = false;
+        activeIndex.value = -1;
+    }
+};
+
+const clearPath = () => {
+    path.value = "";
+    showSuggestions.value = false;
+    activeIndex.value = -1;
+    suggestions.value = [];
+};
+
+const selectSuggestion = (value) => {
+    path.value = value;
+    showSuggestions.value = false;
+    activeIndex.value = -1;
+};
+
+const matchPositions = (value, query) => {
+    const v = value.toLowerCase();
+    const q = query.toLowerCase();
+    const positions = [];
+    let index = 0;
+    for (const ch of q) {
+        const found = v.indexOf(ch, index);
+        if (found === -1) {
+            return null;
+        }
+        positions.push(found);
+        index = found + 1;
+    }
+    return positions;
+};
+
+const scoreMatch = (positions, value) => {
+    if (!positions || positions.length === 0) {
+        return 0;
+    }
+    const length = value.length;
+    let score = positions.length;
+    for (let i = 1; i < positions.length; i++) {
+        if (positions[i] === positions[i - 1] + 1) {
+            score += 3;
+        } else {
+            score += 1;
+        }
+    }
+    for (const pos of positions) {
+        if (pos === 0) {
+            score += 3;
+        } else {
+            const prev = pos - 1;
+            if (prev >= 0 && prev < length && isBoundary(value[prev])) {
+                score += 2;
+            }
+        }
+    }
+    score += Math.max(0, 30 - positions[0]);
+    return score;
+};
+
+const isBoundary = (ch) => ch === "/" || ch === "\\" || ch === "_" || ch === "-" || ch === " ";
+
+const buildSegments = (value, positions) => {
+    const segments = [];
+    const posSet = new Set(positions);
+    let current = "";
+    let currentMatch = posSet.has(0);
+    for (let i = 0; i < value.length; i++) {
+        const isMatch = posSet.has(i);
+        if (isMatch !== currentMatch && current !== "") {
+            segments.push({ text: current, match: currentMatch });
+            current = "";
+        }
+        currentMatch = isMatch;
+        current += value[i];
+    }
+    if (current !== "") {
+        segments.push({ text: current, match: currentMatch });
+    }
+    return segments;
+};
+
+const setBusy = (isBusy, label) => {
+    busy.value = isBusy;
+    if (label) {
+        output.value = label;
+    }
+};
+
+const appendOutput = (text) => {
+    output.value = text;
+};
+
+const errorOutput = (message) => {
+    output.value = `错误：${message}`;
+};
+
+const scheduleSuggest = () => {
+    if (suggestTimer) {
+        clearTimeout(suggestTimer);
+    }
+    suggestTimer = setTimeout(() => {
+        suggestPaths(path.value.trim());
+    }, 200);
+};
+
+const suggestPaths = async (prefix) => {
+    if (prefix === lastSuggest) {
+        return;
+    }
+    lastSuggest = prefix;
+    if (suggestController) {
+        suggestController.abort();
+    }
+    suggestController = new AbortController();
+
+    try {
+        const url = new URL("/api/path", window.location.origin);
+        if (prefix !== "") {
+            url.searchParams.set("prefix", prefix);
+        }
+        const res = await fetch(url.toString(), { signal: suggestController.signal });
+        if (!res.ok) {
+            return;
+        }
+        const data = await res.json();
+        if (!data.ok || !Array.isArray(data.items)) {
+            return;
+        }
+        suggestions.value = data.items;
+    } catch (err) {
+        if (err && err.name === "AbortError") {
+            return;
+        }
+    }
+};
+
+const postForm = async (url) => {
+    const form = new FormData();
+    const value = path.value.trim();
+    if (value !== "") {
+        form.append("path", value);
+    }
+    return fetch(url, { method: "POST", body: form });
+};
+
+const runInfo = async (url, label) => {
+    if (!hasInput()) {
+        errorOutput("请先填写媒体路径。");
+        return;
+    }
+    try {
+        setBusy(true, `${label} 生成中...`);
+        const res = await postForm(url);
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (err) {
+            data = {};
+        }
+        if (!res.ok || !data.ok) {
+            throw new Error(data.error || "请求失败。");
+        }
+        appendOutput(data.output || "没有输出。");
+    } catch (err) {
+        errorOutput(err && err.message ? err.message : "请求失败。");
+    } finally {
+        setBusy(false);
+    }
+};
+
+const downloadShots = async () => {
+    if (!hasInput()) {
+        errorOutput("请先填写媒体路径。");
+        return;
+    }
+    try {
+        setBusy(true, "正在生成截图...");
+        const res = await postForm("/api/screenshots");
+        const contentType = res.headers.get("content-type") || "";
+        if (!res.ok || !contentType.includes("application/zip")) {
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (err) {
+                data = {};
+            }
+            throw new Error(data.error || "截图请求失败。");
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "screenshots.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        appendOutput("截图已下载为 screenshots.zip。");
+    } catch (err) {
+        errorOutput(err && err.message ? err.message : "截图请求失败。");
+    } finally {
+        setBusy(false);
+    }
+};
+
+const clearOutput = () => {
+    if (busy.value) {
+        return;
+    }
+    appendOutput("就绪。");
+};
+
+const copyOutput = async () => {
+    const text = output.value || "";
+    if (text.trim() === "") {
+        errorOutput("没有可复制的内容。");
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (err) {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand("copy");
+        } finally {
+            textarea.remove();
+        }
+    }
+
+    const original = copyLabel.value;
+    copyLabel.value = "已复制";
+    setTimeout(() => {
+        copyLabel.value = original;
+    }, 1200);
+};
+
+onBeforeUnmount(() => {
+    if (suggestTimer) {
+        clearTimeout(suggestTimer);
+    }
+    if (suggestController) {
+        suggestController.abort();
+    }
+});
 </script>
