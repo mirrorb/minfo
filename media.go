@@ -231,27 +231,23 @@ func isVideoFile(path string) bool {
 }
 
 func findFirstVideoFile(root string) (string, error) {
-    var first string
-    err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-        if err != nil {
-            return err
-        }
-        if d.IsDir() {
-            return nil
-        }
-        if !isVideoFile(path) {
-            return nil
-        }
-        first = path
-        return errISOFound
-    })
-    if err != nil && !errors.Is(err, errISOFound) {
+    entries, err := os.ReadDir(root)
+    if err != nil {
         return "", err
     }
-    if first == "" {
-        return "", errors.New("no video files found under path")
+
+    for _, entry := range entries {
+        if entry.IsDir() {
+            continue
+        }
+        name := entry.Name()
+        if !isVideoFile(name) {
+            continue
+        }
+        return filepath.Join(root, name), nil
     }
-    return first, nil
+
+    return "", errors.New("no video files found in current directory (mediainfo does not search subfolders)")
 }
 
 func mountISO(ctx context.Context, isoPath string) (string, func(), error) {
