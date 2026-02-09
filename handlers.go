@@ -110,6 +110,10 @@ func mediainfoHandler(envKey, fallback string) http.HandlerFunc {
             }
             output += strings.TrimSpace(stderr)
         }
+        if output == "" {
+            writeError(w, http.StatusInternalServerError, "mediainfo returned empty output")
+            return
+        }
 
         writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
     }

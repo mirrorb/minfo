@@ -12,6 +12,7 @@ import (
 
 var errNoISO = errors.New("no iso found")
 var errISOFound = errors.New("iso found")
+var errNoVideo = errors.New("no video files found")
 
 func resolveScreenshotSource(ctx context.Context, input string) (string, func(), error) {
     info, err := os.Stat(input)
@@ -42,7 +43,12 @@ func resolveScreenshotSource(ctx context.Context, input string) (string, func(),
         return "", noop, err
     }
 
-    return "", noop, errors.New("path does not contain BDMV or BDISO content")
+    videoPath, err := findVideoFile(input)
+    if err != nil {
+        return "", noop, err
+    }
+
+    return videoPath, noop, nil
 }
 
 func resolveMediaInfoSource(ctx context.Context, input string) (string, func(), error) {
@@ -55,7 +61,7 @@ func resolveMediaInfoSource(ctx context.Context, input string) (string, func(), 
         return input, noop, nil
     }
 
-    videoPath, err := findFirstVideoFile(input)
+    videoPath, err := findVideoFile(input)
     if err != nil {
         return "", noop, err
     }
@@ -230,11 +236,14 @@ func isVideoFile(path string) bool {
     }
 }
 
-func findFirstVideoFile(root string) (string, error) {
+func findVideoFile(root string) (string, error) {
     entries, err := os.ReadDir(root)
     if err != nil {
         return "", err
     }
+
+    var bestPath string
+    var bestSize int64
 
     for _, entry := range entries {
         if entry.IsDir() {
@@ -244,10 +253,54 @@ func findFirstVideoFile(root string) (string, error) {
         if !isVideoFile(name) {
             continue
         }
-        return filepath.Join(root, name), nil
+        info, err := entry.Info()
+        if err != nil {
+            return "", err
+        }
+        if info.Size() > bestSize {
+            bestSize = info.Size()
+            bestPath = filepath.Join(root, name)
+        }
     }
 
-    return "", errors.New("no video files found in current directory (mediainfo does not search subfolders)")
+    if bestPath != "" {
+        return bestPath, nil
+    }
+
+    return findLargestVideoFile(root)
+}
+
+func findLargestVideoFile(root string) (string, error) {
+    var largestPath string
+    var largestSize int64
+
+    err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        if d.IsDir() {
+            return nil
+        }
+        if !isVideoFile(path) {
+            return nil
+        }
+        info, err := d.Info()
+        if err != nil {
+            return err
+        }
+        if info.Size() > largestSize {
+            largestSize = info.Size()
+            largestPath = path
+        }
+        return nil
+    })
+    if err != nil {
+        return "", err
+    }
+    if largestPath == "" {
+        return "", fmt.Errorf("%w under directory: %s", errNoVideo, root)
+    }
+    return largestPath, nil
 }
 
 func mountISO(ctx context.Context, isoPath string) (string, func(), error) {
