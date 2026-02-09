@@ -19,7 +19,7 @@ COPY --from=webui /app/dist ./webui/dist
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/minfo
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/minfo
 
 FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_SDK_TAG} AS bdinfo-build
 ARG BDINFO_REPO
@@ -66,7 +66,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mediainfo \
     libgdiplus \
     util-linux \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
+    /usr/share/doc \
+    /usr/share/info \
+    /usr/share/man
 COPY --from=build /out/minfo /usr/local/bin/minfo
 COPY --from=bdinfo-build /out/bdinfo /opt/bdinfo
 COPY bdinfo.sh /usr/local/bin/bdinfo

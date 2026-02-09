@@ -90,32 +90,41 @@ func mediainfoHandler(envKey, fallback string) http.HandlerFunc {
         ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
         defer cancel()
 
-        sourcePath, sourceCleanup, err := resolveMediaInfoSource(ctx, path)
+        candidates, sourceCleanup, err := resolveMediaInfoCandidates(ctx, path, mediaInfoCandidateLimit)
         if err != nil {
             writeError(w, http.StatusBadRequest, err.Error())
             return
         }
         defer sourceCleanup()
 
-        stdout, stderr, err := runCommand(ctx, bin, sourcePath)
-        if err != nil {
-            writeError(w, http.StatusInternalServerError, bestErrorMessage(err, stderr, stdout))
-            return
-        }
-
-        output := strings.TrimSpace(stdout)
-        if strings.TrimSpace(stderr) != "" {
-            if output != "" {
-                output += "\n\n"
+        var lastErr string
+        for _, sourcePath := range candidates {
+            stdout, stderr, err := runCommand(ctx, bin, sourcePath)
+            if err != nil {
+                lastErr = bestErrorMessage(err, stderr, stdout)
+                continue
             }
-            output += strings.TrimSpace(stderr)
-        }
-        if output == "" {
-            writeError(w, http.StatusInternalServerError, "mediainfo returned empty output")
+
+            output := strings.TrimSpace(stdout)
+            if strings.TrimSpace(stderr) != "" {
+                if output != "" {
+                    output += "\n\n"
+                }
+                output += strings.TrimSpace(stderr)
+            }
+            if output == "" {
+                lastErr = fmt.Sprintf("mediainfo returned empty output for: %s", sourcePath)
+                continue
+            }
+
+            writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
             return
         }
 
-        writeJSON(w, http.StatusOK, infoResponse{OK: true, Output: output})
+        if lastErr == "" {
+            lastErr = "mediainfo returned empty output"
+        }
+        writeError(w, http.StatusInternalServerError, lastErr)
     }
 }
 

@@ -7,12 +7,14 @@ import (
     "io/fs"
     "os"
     "path/filepath"
+    "sort"
     "strings"
 )
 
 var errNoISO = errors.New("no iso found")
 var errISOFound = errors.New("iso found")
 var errNoVideo = errors.New("no video files found")
+const mediaInfoCandidateLimit = 5
 
 func resolveScreenshotSource(ctx context.Context, input string) (string, func(), error) {
     info, err := os.Stat(input)
@@ -68,6 +70,23 @@ func resolveMediaInfoSource(ctx context.Context, input string) (string, func(), 
     return videoPath, noop, nil
 }
 
+func resolveMediaInfoCandidates(ctx context.Context, input string, limit int) ([]string, func(), error) {
+    info, err := os.Stat(input)
+    if err != nil {
+        return nil, noop, err
+    }
+
+    if !info.IsDir() {
+        return []string{input}, noop, nil
+    }
+
+    candidates, err := findVideoCandidates(input, limit)
+    if err != nil {
+        return nil, noop, err
+    }
+    return candidates, noop, nil
+}
+
 func resolveBDInfoSource(ctx context.Context, input string) (string, func(), error) {
     info, err := os.Stat(input)
     if err != nil {
@@ -75,6 +94,9 @@ func resolveBDInfoSource(ctx context.Context, input string) (string, func(), err
     }
 
     if !info.IsDir() {
+        if isISOFile(input) {
+            return resolveBDInfoFromMountedISO(ctx, input)
+        }
         return "", noop, errors.New("path must be a folder containing BDMV or ISO")
     }
 
@@ -268,6 +290,59 @@ func findVideoFile(root string) (string, error) {
     }
 
     return findLargestVideoFile(root)
+}
+
+type videoCandidate struct {
+    path string
+    size int64
+}
+
+func findVideoCandidates(root string, limit int) ([]string, error) {
+    if limit <= 0 {
+        limit = 1
+    }
+
+    items := make([]videoCandidate, 0, 16)
+    err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        if d.IsDir() {
+            return nil
+        }
+        if !isVideoFile(path) {
+            return nil
+        }
+        info, err := d.Info()
+        if err != nil {
+            return err
+        }
+        items = append(items, videoCandidate{path: path, size: info.Size()})
+        return nil
+    })
+    if err != nil {
+        return nil, err
+    }
+    if len(items) == 0 {
+        return nil, fmt.Errorf("%w under directory: %s", errNoVideo, root)
+    }
+
+    sort.Slice(items, func(i, j int) bool {
+        if items[i].size != items[j].size {
+            return items[i].size > items[j].size
+        }
+        return items[i].path < items[j].path
+    })
+
+    if limit > len(items) {
+        limit = len(items)
+    }
+
+    results := make([]string, 0, limit)
+    for i := 0; i < limit; i++ {
+        results = append(results, items[i].path)
+    }
+    return results, nil
 }
 
 func findLargestVideoFile(root string) (string, error) {
