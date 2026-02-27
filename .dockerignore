@@ -1,0 +1,9 @@
+/bin/
+*.zip
+*.log
+.git
+.gitignore
+README.md
+webui/node_modules
+webui/dist
+webui/.vite

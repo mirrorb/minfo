@@ -1,0 +1,5 @@
+/bin/
+*.zip
+/webui/node_modules/
+/webui/.vite/
+/webui/dist/
