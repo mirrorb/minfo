@@ -48,7 +48,7 @@ RUN set -eux; \
     # 提取生成的二进制文件
     exe=""; \
     for f in /out/bdinfo/*; do \
-        if[ -f "$f" ] && [ -x "$f" ] &&[ "${f##*.}" != "dll" ] && [ "${f##*.}" != "json" ] &&[ "${f##*.}" != "pdb" ]; then \
+        if [ -f "$f" ] && [ -x "$f" ] &&[ "${f##*.}" != "dll" ] && [ "${f##*.}" != "json" ] &&[ "${f##*.}" != "pdb" ]; then \
             exe="$f"; break; \
         fi; \
     done; \
@@ -88,4 +88,4 @@ ENV PORT=8080
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 EXPOSE 8080
-ENTRYPOINT["/usr/local/bin/minfo"]
+ENTRYPOINT ["/usr/local/bin/minfo"]
