@@ -7,5 +7,6 @@ services:
     environment:
       PORT: "8080"
       WEB_PASSWORD: "adminadmin"
+      REQUEST_TIMEOUT: "20m"
     volumes:
       - /home/mirrorb/qbittorrent/Downloads:/media:ro

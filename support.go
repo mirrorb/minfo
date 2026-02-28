@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
     "archive/zip"
@@ -20,15 +20,18 @@ import (
 )
 
 const (
-    defaultPort    = "8080"
-    defaultRoot    = "/media"
-    maxUploadBytes = int64(8 << 30)
-    maxMemoryBytes = int64(32 << 20)
-    maxSuggestions = 200
-    mountTimeout   = 30 * time.Second
-    umountTimeout  = 30 * time.Second
-    infoTimeout    = 3 * time.Minute
-    shotTimeout    = 10 * time.Minute
+    defaultPort           = "8080"
+    defaultRoot           = "/media"
+    maxUploadBytes        = int64(8 << 30)
+    maxMemoryBytes        = int64(32 << 20)
+    maxSuggestions        = 200
+    mountTimeout          = 30 * time.Second
+    umountTimeout         = 30 * time.Second
+    defaultRequestTimeout = 10 * time.Minute
+)
+
+var (
+    requestTimeout = durationFromEnv("REQUEST_TIMEOUT", defaultRequestTimeout)
 )
 
 type infoResponse struct {
@@ -52,6 +55,20 @@ func getenv(key, fallback string) string {
         return fallback
     }
     return value
+}
+
+func durationFromEnv(key string, fallback time.Duration) time.Duration {
+    value := strings.TrimSpace(os.Getenv(key))
+    if value == "" {
+        return fallback
+    }
+
+    duration, err := time.ParseDuration(value)
+    if err != nil || duration <= 0 {
+        log.Printf("invalid %s=%q; fallback to %s", key, value, fallback)
+        return fallback
+    }
+    return duration
 }
 
 func mediaRoot() string {
@@ -228,13 +245,31 @@ func resolveBin(envKey, fallback string) (string, error) {
 }
 
 func runCommand(ctx context.Context, bin string, args ...string) (string, string, error) {
-    cmd := exec.CommandContext(ctx, bin, args...)
+    cmd := exec.Command(bin, args...)
+    setCommandProcessGroup(cmd)
+
     var stdout bytes.Buffer
     var stderr bytes.Buffer
     cmd.Stdout = &stdout
     cmd.Stderr = &stderr
-    err := cmd.Run()
-    return stdout.String(), stderr.String(), err
+
+    if err := cmd.Start(); err != nil {
+        return stdout.String(), stderr.String(), err
+    }
+
+    waitCh := make(chan error, 1)
+    go func() {
+        waitCh <- cmd.Wait()
+    }()
+
+    select {
+    case err := <-waitCh:
+        return stdout.String(), stderr.String(), err
+    case <-ctx.Done():
+        killCommandProcessGroup(cmd)
+        <-waitCh
+        return stdout.String(), stderr.String(), ctx.Err()
+    }
 }
 
 func zipFiles(paths []string) ([]byte, error) {
@@ -279,3 +314,4 @@ func zipFiles(paths []string) ([]byte, error) {
     }
     return buf.Bytes(), nil
 }
+

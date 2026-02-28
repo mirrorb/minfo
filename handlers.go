@@ -38,7 +38,7 @@ func infoHandler(envKey, fallback string) http.HandlerFunc {
             return
         }
 
-        ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
+        ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
         defer cancel()
 
         stdout, stderr, err := runCommand(ctx, bin, path)
@@ -87,7 +87,7 @@ func mediainfoHandler(envKey, fallback string) http.HandlerFunc {
             return
         }
 
-        ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
+        ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
         defer cancel()
 
         candidates, sourceCleanup, err := resolveMediaInfoCandidates(ctx, path, mediaInfoCandidateLimit)
@@ -152,7 +152,7 @@ func bdinfoHandler(envKey, fallback string) http.HandlerFunc {
             return
         }
 
-        ctx, cancel := context.WithTimeout(r.Context(), infoTimeout)
+        ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
         defer cancel()
 
         bdPath, bdCleanup, err := resolveBDInfoSource(ctx, path)
@@ -208,7 +208,7 @@ func screenshotsHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    ctx, cancel := context.WithTimeout(r.Context(), shotTimeout)
+    ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
     defer cancel()
 
     sourcePath, sourceCleanup, err := resolveScreenshotSource(ctx, path)
