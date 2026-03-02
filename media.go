@@ -398,15 +398,68 @@ func mountISO(ctx context.Context, isoPath string) (string, func(), error) {
 
     _, stderr, err := runCommand(mountCtx, mountBin, "-o", "loop,ro", isoPath, mountDir)
     if err != nil {
-        _ = os.RemoveAll(mountDir)
         msg := strings.TrimSpace(stderr)
         if msg == "" {
             msg = err.Error()
         }
-        return "", noop, fmt.Errorf("mount iso failed: %s", msg)
+
+        if isUnknownUDFMountError(msg) {
+            if modErr := loadUDFModule(mountCtx); modErr == nil {
+                _, retryStderr, retryErr := runCommand(mountCtx, mountBin, "-o", "loop,ro", isoPath, mountDir)
+                if retryErr == nil {
+                    cleanup := buildMountCleanup(mountDir, umountBin)
+                    return mountDir, cleanup, nil
+                }
+
+                retryMsg := strings.TrimSpace(retryStderr)
+                if retryMsg == "" {
+                    retryMsg = retryErr.Error()
+                }
+                _ = os.RemoveAll(mountDir)
+                return "", noop, fmt.Errorf("mount iso failed after modprobe udf: %s", retryMsg)
+            }
+        }
+
+        _ = os.RemoveAll(mountDir)
+        return "", noop, fmt.Errorf("mount iso failed: %s", explainISOmountError(msg))
     }
 
-    cleanup := func() {
+    cleanup := buildMountCleanup(mountDir, umountBin)
+
+    return mountDir, cleanup, nil
+}
+
+func explainISOmountError(message string) string {
+    if isUnknownUDFMountError(message) {
+        return message + "; attempted auto `modprobe udf`, please check host kernel module availability"
+    }
+    return message
+}
+
+func isUnknownUDFMountError(message string) bool {
+    lower := strings.ToLower(message)
+    return strings.Contains(lower, "unknown filesystem type 'udf'") || strings.Contains(lower, "unknown filesystem type \"udf\"")
+}
+
+func loadUDFModule(ctx context.Context) error {
+    modprobeBin, err := resolveBin("MODPROBE_BIN", "modprobe")
+    if err != nil {
+        return err
+    }
+
+    _, stderr, err := runCommand(ctx, modprobeBin, "udf")
+    if err != nil {
+        msg := strings.TrimSpace(stderr)
+        if msg == "" {
+            msg = err.Error()
+        }
+        return fmt.Errorf("modprobe udf failed: %s", msg)
+    }
+    return nil
+}
+
+func buildMountCleanup(mountDir, umountBin string) func() {
+    return func() {
         umountCtx, cancel := context.WithTimeout(context.Background(), umountTimeout)
         defer cancel()
         if _, _, err := runCommand(umountCtx, umountBin, mountDir); err != nil {
@@ -414,6 +467,4 @@ func mountISO(ctx context.Context, isoPath string) (string, func(), error) {
         }
         _ = os.RemoveAll(mountDir)
     }
-
-    return mountDir, cleanup, nil
 }

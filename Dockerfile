@@ -66,6 +66,7 @@ RUN apk add --no-cache \
     ca-certificates \
     ffmpeg \
     mediainfo \
+    kmod \
     libgdiplus \
     findutils \
     util-linux \
@@ -84,7 +85,6 @@ ENV BDINFO_BIN=/usr/local/bin/bdinfo
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PORT=8080
-# 开启全球化不变模式以缩减 .NET 运行体积
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 EXPOSE 8080
