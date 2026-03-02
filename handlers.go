@@ -9,9 +9,9 @@ import (
     "net/http"
     "os"
     "path/filepath"
-    "sort"
-    "strings"
     "strconv"
+    "strings"
+    "sync"
     "time"
 )
 
@@ -233,7 +233,7 @@ func screenshotsHandler(w http.ResponseWriter, r *http.Request) {
     defer os.RemoveAll(tempDir)
 
     stamps := calcTimestamps(duration)
-    files, err := captureShotsBatch(ctx, ffmpeg, sourcePath, stamps, tempDir)
+    files, err := captureShotsConcurrent(ctx, ffmpeg, sourcePath, stamps, tempDir)
     if err != nil {
         writeError(w, http.StatusInternalServerError, err.Error())
         return
@@ -336,76 +336,66 @@ func captureShot(ctx context.Context, ffmpeg, path string, seconds float64, outP
     return nil
 }
 
-func captureShotsBatch(ctx context.Context, ffmpeg, path string, stamps []float64, tempDir string) ([]string, error) {
+func screenshotConcurrency() int {
+    return 4
+}
+
+func captureShotsConcurrent(ctx context.Context, ffmpeg, path string, stamps []float64, tempDir string) ([]string, error) {
     if len(stamps) == 0 {
         return nil, errors.New("no screenshot timestamps generated")
     }
 
-    type shotSpec struct {
-        name string
-        ts   float64
+    files := make([]string, 0, len(stamps))
+    for i := range stamps {
+        outPath := filepath.Join(tempDir, fmt.Sprintf("shot_%02d.png", i+1))
+        files = append(files, outPath)
     }
 
-    specs := make([]shotSpec, 0, len(stamps))
-    for i, ts := range stamps {
-        specs = append(specs, shotSpec{
-            name: filepath.Join(tempDir, fmt.Sprintf("shot_%02d.png", i+1)),
-            ts:   ts,
+    runCtx, cancel := context.WithCancel(ctx)
+    defer cancel()
+
+    sem := make(chan struct{}, screenshotConcurrency())
+    var wg sync.WaitGroup
+    var once sync.Once
+    var firstErr error
+
+    setErr := func(err error) {
+        once.Do(func() {
+            firstErr = err
+            cancel()
         })
     }
 
-    sort.Slice(specs, func(i, j int) bool {
-        return specs[i].ts < specs[j].ts
-    })
+    for i, ts := range stamps {
+        i := i
+        ts := ts
+        outPath := files[i]
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
 
-    var filterParts []string
-    splitRefs := make([]string, len(specs))
-    for i := range specs {
-        splitRefs[i] = fmt.Sprintf("[v%d]", i)
-    }
-    filterParts = append(filterParts, fmt.Sprintf("[0:v]split=%d%s", len(specs), strings.Join(splitRefs, "")))
+            select {
+            case sem <- struct{}{}:
+            case <-runCtx.Done():
+                return
+            }
+            defer func() { <-sem }()
 
-    args := []string{
-        "-hide_banner",
-        "-loglevel", "error",
-        "-y",
-        "-i", path,
-    }
-
-    for i, spec := range specs {
-        ts := fmt.Sprintf("%.3f", spec.ts)
-        filterParts = append(filterParts, fmt.Sprintf("[v%d]select=gte(t\\,%s),setpts=PTS-STARTPTS[o%d]", i, ts, i))
+            if err := captureShot(runCtx, ffmpeg, path, ts, outPath); err != nil {
+                setErr(err)
+            }
+        }()
     }
 
-    args = append(args, "-filter_complex", strings.Join(filterParts, ";"))
-
-    for i, spec := range specs {
-        args = append(args,
-            "-map", fmt.Sprintf("[o%d]", i),
-            "-frames:v:0", "1",
-            "-q:v:0", "2",
-            spec.name,
-        )
+    wg.Wait()
+    if firstErr != nil {
+        return nil, firstErr
     }
 
-    stdout, stderr, err := runCommand(ctx, ffmpeg, args...)
-    if err != nil {
-        msg := strings.TrimSpace(stderr)
-        if msg == "" {
-            msg = err.Error()
+    for _, file := range files {
+        if _, err := os.Stat(file); err != nil {
+            return nil, fmt.Errorf("screenshot output missing: %s", file)
         }
-        if strings.TrimSpace(stdout) != "" {
-            msg += "\n" + strings.TrimSpace(stdout)
-        }
-        return nil, fmt.Errorf("ffmpeg batch shots failed: %s", msg)
-    }
-
-    files := make([]string, 0, len(specs))
-    for _, spec := range specs {
-        if _, err := os.Stat(spec.name); err != nil {
-            return nil, fmt.Errorf("ffmpeg batch shots missing output: %s", spec.name)
-        }
-        files = append(files, spec.name)
     }
     return files, nil
 }
