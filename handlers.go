@@ -262,11 +262,15 @@ func pathSuggestHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    root := mediaRoot()
+    roots, err := resolveRoots(mediaRoots())
+    if err != nil {
+        writePathError(w, http.StatusBadRequest, err.Error())
+        return
+    }
     prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
     prefix = strings.Trim(prefix, "\"")
 
-    items, err := suggestPaths(root, prefix, maxSuggestions)
+    items, root, err := suggestPaths(roots, prefix, maxSuggestions)
     if err != nil {
         writePathError(w, http.StatusBadRequest, err.Error())
         return
@@ -275,6 +279,7 @@ func pathSuggestHandler(w http.ResponseWriter, r *http.Request) {
     writePathJSON(w, http.StatusOK, pathResponse{
         OK:    true,
         Root:  root,
+        Roots: roots,
         Items: items,
     })
 }
@@ -386,39 +391,105 @@ func calcTimestamps(duration float64) []float64 {
     return ts
 }
 
-func suggestPaths(root, prefix string, limit int) ([]string, error) {
-    root = filepath.Clean(root)
-    rootAbs, err := filepath.Abs(root)
-    if err != nil {
-        return nil, err
+func suggestPaths(roots []string, prefix string, limit int) ([]string, string, error) {
+    if len(roots) == 0 {
+        return nil, "", errors.New("no MEDIA_ROOT configured")
     }
+    resolvedRoots := roots
 
     if prefix == "" {
-        return listDir(rootAbs, "", limit)
+        if len(resolvedRoots) == 1 {
+            items, err := listDir(resolvedRoots[0], "", limit)
+            return items, resolvedRoots[0], err
+        }
+        items := make([]string, 0, len(resolvedRoots))
+        for _, root := range resolvedRoots {
+            items = append(items, withDirSuffix(root))
+        }
+        return items, "", nil
     }
 
     cleaned := filepath.Clean(prefix)
+    selectedRoot := ""
     var absPrefix string
     if filepath.IsAbs(cleaned) {
         absPrefix = cleaned
+        matchedRoot, ok := findContainingRoot(resolvedRoots, absPrefix)
+        if !ok {
+            return nil, "", errors.New("path is outside MEDIA_ROOTS")
+        }
+        selectedRoot = matchedRoot
     } else {
-        absPrefix = filepath.Join(rootAbs, cleaned)
+        if len(resolvedRoots) != 1 {
+            return nil, "", errors.New("relative path requires a single MEDIA_ROOT")
+        }
+        selectedRoot = resolvedRoots[0]
+        absPrefix = filepath.Join(selectedRoot, cleaned)
     }
 
     sep := string(filepath.Separator)
-    if strings.HasSuffix(prefix, sep) || strings.HasSuffix(prefix, "/") {
-        if !isSubpath(rootAbs, absPrefix) {
-            return nil, errors.New("path is outside MEDIA_ROOT")
+    if strings.HasSuffix(prefix, sep) || strings.HasSuffix(prefix, "/") || strings.HasSuffix(prefix, "\\") {
+        if !isSubpath(selectedRoot, absPrefix) {
+            return nil, "", errors.New("path is outside MEDIA_ROOTS")
         }
-        return listDir(absPrefix, "", limit)
+        items, err := listDir(absPrefix, "", limit)
+        return items, selectedRoot, err
     }
 
     dir := filepath.Dir(absPrefix)
     base := filepath.Base(absPrefix)
-    if !isSubpath(rootAbs, dir) {
-        return nil, errors.New("path is outside MEDIA_ROOT")
+    if !isSubpath(selectedRoot, dir) {
+        return nil, "", errors.New("path is outside MEDIA_ROOTS")
     }
-    return listDir(dir, base, limit)
+    items, err := listDir(dir, base, limit)
+    return items, selectedRoot, err
+}
+
+func resolveRoots(roots []string) ([]string, error) {
+    resolved := make([]string, 0, len(roots))
+    seen := make(map[string]struct{}, len(roots))
+    for _, root := range roots {
+        clean := filepath.Clean(strings.TrimSpace(root))
+        if clean == "" {
+            continue
+        }
+        absRoot, err := filepath.Abs(clean)
+        if err != nil {
+            return nil, err
+        }
+        if _, ok := seen[absRoot]; ok {
+            continue
+        }
+        seen[absRoot] = struct{}{}
+        resolved = append(resolved, absRoot)
+    }
+    if len(resolved) == 0 {
+        return nil, errors.New("no MEDIA_ROOT configured")
+    }
+    return resolved, nil
+}
+
+func findContainingRoot(roots []string, path string) (string, bool) {
+    best := ""
+    for _, root := range roots {
+        if !isSubpath(root, path) {
+            continue
+        }
+        if len(root) > len(best) {
+            best = root
+        }
+    }
+    if best == "" {
+        return "", false
+    }
+    return best, true
+}
+
+func withDirSuffix(path string) string {
+    if strings.HasSuffix(path, string(filepath.Separator)) {
+        return path
+    }
+    return path + string(filepath.Separator)
 }
 
 func listDir(dir, base string, limit int) ([]string, error) {
@@ -431,7 +502,7 @@ func listDir(dir, base string, limit int) ([]string, error) {
     items := make([]string, 0, len(entries))
     for _, entry := range entries {
         name := entry.Name()
-        if baseLower != "" && !strings.HasPrefix(strings.ToLower(name), baseLower) {
+        if baseLower != "" && !strings.Contains(strings.ToLower(name), baseLower) {
             continue
         }
         full := filepath.Join(dir, name)

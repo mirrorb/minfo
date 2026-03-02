@@ -28,4 +28,3 @@ func killCommandProcessGroup(cmd *exec.Cmd) {
     time.Sleep(300 * time.Millisecond)
     _ = syscall.Kill(-pid, syscall.SIGKILL)
 }
-

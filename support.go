@@ -14,6 +14,7 @@ import (
     "os"
     "os/exec"
     "path/filepath"
+    "sort"
     "strings"
     "time"
     "unicode/utf8"
@@ -43,6 +44,7 @@ type infoResponse struct {
 type pathResponse struct {
     OK    bool     `json:"ok"`
     Root  string   `json:"root,omitempty"`
+    Roots []string `json:"roots,omitempty"`
     Items []string `json:"items,omitempty"`
     Error string   `json:"error,omitempty"`
 }
@@ -71,8 +73,144 @@ func durationFromEnv(key string, fallback time.Duration) time.Duration {
     return duration
 }
 
-func mediaRoot() string {
-    return getenv("MEDIA_ROOT", defaultRoot)
+func mediaRoots() []string {
+    if roots := detectMountedRoots(); len(roots) > 0 {
+        return roots
+    }
+
+    return []string{defaultRoot}
+}
+
+func detectMountedRoots() []string {
+    content, err := os.ReadFile("/proc/self/mountinfo")
+    if err != nil {
+        return nil
+    }
+
+    ignoredFS := map[string]struct{}{
+        "overlay":   {},
+        "proc":      {},
+        "sysfs":     {},
+        "tmpfs":     {},
+        "devpts":    {},
+        "mqueue":    {},
+        "cgroup":    {},
+        "cgroup2":   {},
+        "nsfs":      {},
+        "tracefs":   {},
+        "debugfs":   {},
+        "configfs":  {},
+        "securityfs": {},
+        "pstore":    {},
+        "fusectl":   {},
+        "hugetlbfs": {},
+        "rpc_pipefs": {},
+    }
+
+    ignoredMountNames := map[string]struct{}{
+        "proc":  {},
+        "sys":   {},
+        "dev":   {},
+        "run":   {},
+        "tmp":   {},
+        "etc":   {},
+        "usr":   {},
+        "lib":   {},
+        "lib64": {},
+        "bin":   {},
+        "sbin":  {},
+        "boot":  {},
+        "var":   {},
+    }
+
+    lines := strings.Split(string(content), "\n")
+    roots := make([]string, 0, len(lines))
+    seen := make(map[string]struct{}, len(lines))
+
+    for _, line := range lines {
+        line = strings.TrimSpace(line)
+        if line == "" {
+            continue
+        }
+
+        parts := strings.SplitN(line, " - ", 2)
+        if len(parts) != 2 {
+            continue
+        }
+        left := strings.Fields(parts[0])
+        right := strings.Fields(parts[1])
+        if len(left) < 5 || len(right) < 1 {
+            continue
+        }
+
+        mountPoint := decodeMountInfoField(left[4])
+        if mountPoint == "" || mountPoint == "/" {
+            continue
+        }
+
+        fsType := right[0]
+        if _, ok := ignoredFS[fsType]; ok {
+            continue
+        }
+
+        if !isTopLevelMount(mountPoint) {
+            continue
+        }
+
+        name := strings.Trim(mountPoint, "/")
+        if _, ok := ignoredMountNames[name]; ok {
+            continue
+        }
+
+        info, err := os.Stat(mountPoint)
+        if err != nil || !info.IsDir() {
+            continue
+        }
+
+        clean := filepath.Clean(mountPoint)
+        if _, ok := seen[clean]; ok {
+            continue
+        }
+
+        seen[clean] = struct{}{}
+        roots = append(roots, clean)
+    }
+
+    sort.Strings(roots)
+    return roots
+}
+
+func isTopLevelMount(path string) bool {
+    trimmed := strings.Trim(path, "/")
+    if trimmed == "" {
+        return false
+    }
+    return !strings.Contains(trimmed, "/")
+}
+
+func decodeMountInfoField(value string) string {
+    if value == "" || !strings.Contains(value, "\\") {
+        return value
+    }
+
+    var b strings.Builder
+    b.Grow(len(value))
+
+    for i := 0; i < len(value); i++ {
+        if value[i] == '\\' && i+3 < len(value) && isOctal(value[i+1]) && isOctal(value[i+2]) && isOctal(value[i+3]) {
+            decoded := (int(value[i+1]-'0') << 6) + (int(value[i+2]-'0') << 3) + int(value[i+3]-'0')
+            b.WriteByte(byte(decoded))
+            i += 3
+            continue
+        }
+        b.WriteByte(value[i])
+    }
+
+    return b.String()
+}
+
+func isOctal(ch byte) bool {
+    return ch >= '0' && ch <= '7'
 }
 
 func logging(next http.Handler) http.Handler {

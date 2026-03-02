@@ -1,17 +1,13 @@
-## 项目介绍
+﻿## 项目介绍
 
-`minfo` 是一个用于本地媒体信息检测的小型 Web 工具。
-
-主要功能：
-
+`minfo` 是一个本地媒体信息检测 Web 工具，主要功能：
 - 输出 MediaInfo 信息
 - 输出 BDInfo 信息
-- 导出 8 张截图压缩包
-- 基于本地媒体目录的路径补全
+- 导出随机 8 张截图压缩包
 
-## 使用方式
+## Docker 运行
 
-使用如下 `docker-compose.yml`：
+示例 `docker-compose.yml`：
 
 ```yaml
 services:
@@ -23,8 +19,12 @@ services:
       - "28081:8080"
     environment:
       WEB_PASSWORD: "adminadmin"
+      REQUEST_TIMEOUT: "20m"
     volumes:
-      - /your/media/path:/media:ro
+      - /your/media/path1:/media_path1
+      - /your/media/path2:/media_path2
+      - /your/media/path3:/media_path3
+      - /your/media/path4:/media_path4
     restart: unless-stopped
 ```
 
@@ -35,5 +35,5 @@ docker compose up -d
 ```
 
 访问：
-
 - `http://localhost:28081`
+

@@ -123,35 +123,9 @@ input[type="text"] {
   gap: 10px;
 }
 
-.path-selected {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(33, 50, 60, 0.2);
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.path-selected input[type="text"] {
-  border: none;
-  padding: 4px 0;
-  background: transparent;
-  flex: 1;
-  font-size: 0.95rem;
-  outline: none;
-  color: var(--ink);
-}
-
 .path-icon {
   font-size: 1rem;
   opacity: 0.65;
-}
-
-.path-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 .path-hint {
@@ -197,6 +171,39 @@ input[type="text"] {
   flex-wrap: wrap;
 }
 
+.browser-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(33, 50, 60, 0.1);
+}
+
+.browser-search input[type="text"] {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+}
+
+.path-selected-value {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(33, 50, 60, 0.1);
+  font-size: 0.86rem;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.path-selected-value.empty {
+  color: var(--muted);
+}
+
+.browser .path-hint {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(33, 50, 60, 0.1);
+}
+
 .browser-error {
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -207,7 +214,7 @@ input[type="text"] {
 
 .browser-list {
   padding: 8px;
-  max-height: 310px;
+  max-height: 340px;
   overflow: auto;
   display: grid;
   gap: 6px;
@@ -220,15 +227,25 @@ input[type="text"] {
   gap: 12px;
   padding: 8px 10px;
   border-radius: 10px;
+  cursor: pointer;
 }
 
 .browser-row:not(.empty):hover {
   background: rgba(47, 111, 109, 0.08);
 }
 
+.browser-row.selected {
+  background: rgba(47, 111, 109, 0.14);
+}
+
+.browser-row.directory .browser-row-name {
+  font-weight: 600;
+}
+
 .browser-row.empty {
   color: var(--muted);
   justify-content: flex-start;
+  cursor: default;
 }
 
 .browser-row-name {
@@ -243,8 +260,7 @@ input[type="text"] {
 }
 
 .browser-row-actions button.ghost,
-.browser-buttons button.ghost,
-.path-actions button.ghost {
+.browser-buttons button.ghost {
   border-radius: 10px;
   padding: 7px 11px;
 }
@@ -324,6 +340,7 @@ pre {
     opacity: 0;
     transform: translateY(16px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -338,5 +355,17 @@ pre {
   .shell {
     padding: 32px 20px 48px;
   }
-}
 
+  .browser-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .browser-row-actions {
+    width: 100%;
+  }
+
+  .browser-row-actions button.ghost {
+    width: 100%;
+  }
+}

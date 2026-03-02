@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div class="grain"></div>
     <main class="shell">
         <header class="hero">
@@ -11,57 +11,60 @@
 
         <section class="panel">
             <div class="field">
-                <label for="selected-path">媒体路径</label>
+                <label for="path-search">媒体路径</label>
                 <div class="path-picker">
-                    <div class="path-selected">
-                        <span class="path-icon">📁</span>
-                        <input
-                            id="selected-path"
-                            type="text"
-                            :value="path"
-                            placeholder="请选择文件或文件夹"
-                            readonly
-                        />
-                    </div>
-                    <div class="path-actions">
-                        <button class="ghost" :disabled="busy" @click="openPicker">选择文件或文件夹</button>
-                        <button class="ghost" :disabled="busy || path.trim() === ''" @click="clearPath">清空路径</button>
-                    </div>
-                    <div class="path-hint">选择明确的媒体文件时，会直接按该文件进行分析。</div>
-                    <div class="browser" v-if="pickerOpen">
+                    <div class="browser integrated">
                         <div class="browser-toolbar">
-                            <div class="browser-current">{{ browserDir || browserRoot || "加载中..." }}</div>
+                            <div class="browser-current">{{ browserDir || "可用挂载路径" }}</div>
                             <div class="browser-buttons">
-                                <button class="ghost" :disabled="busy || browserLoading || isAtRoot" @click="navigateUp">上一级</button>
+                                <button class="ghost" :disabled="busy || browserLoading || !canNavigateUp" @click="navigateUp">上一级</button>
                                 <button class="ghost" :disabled="busy || browserLoading" @click="refreshBrowser">刷新</button>
-                                <button class="ghost" :disabled="busy" @click="closePicker">关闭</button>
+                                <button class="ghost" :disabled="busy || browserLoading || !browserDir" @click="chooseCurrentDir">选择当前目录</button>
+                                <button class="ghost" :disabled="busy || path.trim() === ''" @click="clearPath">清空路径</button>
                             </div>
                         </div>
+
+                        <div class="browser-search">
+                            <span class="path-icon">📁</span>
+                            <input
+                                id="path-search"
+                                type="text"
+                                v-model="searchKeyword"
+                                placeholder="模糊搜索当前目录（双击目录进入）"
+                            />
+                        </div>
+
+                        <div class="path-selected-value" :class="{ empty: path.trim() === '' }">
+                            {{ path.trim() === '' ? "未选择路径" : `已选择: ${path}` }}
+                        </div>
+
+                        <div class="path-hint">单击条目即可选择路径；目录支持双击进入，文件可直接分析。</div>
+
                         <div class="browser-error" v-if="browserError !== ''">
                             {{ browserError }}
                         </div>
+
                         <div class="browser-list">
-                            <div class="browser-row">
-                                <span class="browser-row-name">当前目录</span>
-                                <div class="browser-row-actions">
-                                    <button class="ghost" :disabled="busy || browserLoading || !browserDir" @click="chooseCurrentDir">
-                                        选择此文件夹
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="browser-row empty" v-if="!browserLoading && browserEntries.length === 0">
-                                目录为空
-                            </div>
                             <div class="browser-row empty" v-if="browserLoading">
                                 加载中...
                             </div>
-                            <div class="browser-row" v-for="entry in browserEntries" :key="entry.path">
-                                <span class="browser-row-name">{{ entry.name }}</span>
+                            <div class="browser-row empty" v-else-if="filteredEntries.length === 0">
+                                当前目录无匹配项
+                            </div>
+                            <div
+                                class="browser-row"
+                                :class="{
+                                    selected: normalizeComparePath(path) === normalizeComparePath(entry.path),
+                                    directory: entry.isDir,
+                                }"
+                                v-for="entry in filteredEntries"
+                                :key="entry.path"
+                                @click="choosePath(entry.path)"
+                                @dblclick="handleEntryDoubleClick(entry)"
+                            >
+                                <span class="browser-row-name">{{ entry.isDir ? `📁 ${entry.name}` : `📄 ${entry.name}` }}</span>
                                 <div class="browser-row-actions">
-                                    <button class="ghost" v-if="entry.isDir" :disabled="busy || browserLoading" @click="enterDir(entry.path)">
-                                        进入
-                                    </button>
-                                    <button class="ghost" :disabled="busy || browserLoading" @click="choosePath(entry.path)">
+                                    <button class="ghost" :disabled="busy || browserLoading" @click.stop="choosePath(entry.path)">
                                         {{ entry.isDir ? "选择文件夹" : "选择文件" }}
                                     </button>
                                 </div>
@@ -70,6 +73,7 @@
                     </div>
                 </div>
             </div>
+
             <div class="actions">
                 <button :disabled="busy" @click="runInfo('/api/mediainfo', 'MediaInfo')">生成 MediaInfo</button>
                 <button :disabled="busy" @click="runInfo('/api/bdinfo', 'BDInfo')">生成 BDInfo</button>
@@ -89,25 +93,26 @@
         </section>
 
         <footer class="footer">
-            <p>从服务器媒体目录中选择文件或文件夹后再执行分析。</p>
+            <p>浏览并选择媒体文件或文件夹后，再执行分析或截图任务。</p>
         </footer>
     </main>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 const path = ref("");
 const output = ref("就绪。");
 const busy = ref(false);
 const copyLabel = ref("复制");
 
-const pickerOpen = ref(false);
+const browserRoots = ref([]);
 const browserRoot = ref("");
 const browserDir = ref("");
 const browserEntries = ref([]);
 const browserLoading = ref(false);
 const browserError = ref("");
+const searchKeyword = ref("");
 let browserController = null;
 
 const hasInput = () => path.value.trim() !== "";
@@ -119,16 +124,34 @@ const normalizeComparePath = (value) => {
     if (value === "/" || value === "\\") {
         return "/";
     }
-    return value.replace(/\\/g, "/").replace(/\/+$/, "");
+    return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 };
 
-const isAtRoot = computed(() => {
-    const root = normalizeComparePath(browserRoot.value);
-    const current = normalizeComparePath(browserDir.value);
-    if (root === "" || current === "") {
+const canNavigateUp = computed(() => {
+    if (!browserDir.value) {
         return false;
     }
-    return root === current;
+    const root = normalizeComparePath(browserRoot.value);
+    const current = normalizeComparePath(browserDir.value);
+    if (root === "") {
+        return true;
+    }
+    if (current !== root) {
+        return true;
+    }
+    return browserRoots.value.length > 1;
+});
+
+const filteredEntries = computed(() => {
+    const keyword = searchKeyword.value.trim().toLowerCase();
+    if (keyword === "") {
+        return browserEntries.value;
+    }
+    return browserEntries.value.filter((entry) => {
+        const name = (entry.name || "").toLowerCase();
+        const full = (entry.path || "").toLowerCase();
+        return name.includes(keyword) || full.includes(keyword);
+    });
 });
 
 const clearPath = () => {
@@ -228,15 +251,22 @@ const loadDirectory = async (dir) => {
     try {
         const prefix = dir ? withTrailingSeparator(dir) : "";
         const data = await fetchDirectory(prefix);
-        if (typeof data.root === "string" && data.root !== "") {
+        browserRoots.value = Array.isArray(data.roots) ? data.roots.map(cleanPath).filter(Boolean) : [];
+        if (typeof data.root === "string") {
             browserRoot.value = cleanPath(data.root);
         }
+
         browserEntries.value = buildEntries(data.items);
+
         if (dir && dir !== "") {
             browserDir.value = cleanPath(dir);
         } else if (browserRoot.value !== "") {
             browserDir.value = browserRoot.value;
+        } else {
+            browserDir.value = "";
         }
+
+        searchKeyword.value = "";
     } catch (err) {
         if (err && err.name === "AbortError") {
             return;
@@ -255,48 +285,41 @@ const parentDirectory = (dir) => {
     }
     const slash = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
     if (slash <= 0) {
-        return browserRoot.value || normalized;
+        return browserRoot.value || "";
     }
     return normalized.slice(0, slash);
 };
 
-const openPicker = async () => {
-    pickerOpen.value = true;
-    let target = browserDir.value || browserRoot.value;
-    try {
-        const selected = path.value.trim();
-        if (selected !== "") {
-            const data = await fetchDirectory(selected);
-            if (typeof data.root === "string" && data.root !== "") {
-                browserRoot.value = cleanPath(data.root);
-            }
-            if (data.ok) {
-                const cleaned = cleanPath(selected);
-                const hasDirSelf = data.items.some((item) => item === `${cleaned}/` || item === `${cleaned}\\`);
-                target = hasDirSelf ? cleaned : parentDirectory(cleaned);
-            }
-        }
-    } catch (err) {
-        const selected = path.value.trim();
-        if (selected !== "") {
-            target = parentDirectory(selected);
-        }
+const navigateUp = async () => {
+    if (!browserDir.value) {
+        await loadDirectory("");
+        return;
     }
 
-    await loadDirectory(target || "");
+    let parent = parentDirectory(browserDir.value);
+    const root = normalizeComparePath(browserRoot.value);
+    const current = normalizeComparePath(browserDir.value);
+    if (root !== "" && current === root && browserRoots.value.length > 1) {
+        await loadDirectory("");
+        return;
+    }
+    if (root !== "" && normalizeComparePath(parent).length < root.length) {
+        parent = browserRoot.value;
+    }
+
+    if (parent === browserDir.value && browserRoot.value && browserDir.value !== browserRoot.value) {
+        parent = browserRoot.value;
+    }
+
+    await loadDirectory(parent || "");
 };
 
-const closePicker = () => {
-    pickerOpen.value = false;
-};
-
-const enterDir = async (value) => {
-    await loadDirectory(value);
+const refreshBrowser = async () => {
+    await loadDirectory(browserDir.value || "");
 };
 
 const choosePath = (value) => {
     path.value = value;
-    pickerOpen.value = false;
 };
 
 const chooseCurrentDir = () => {
@@ -304,24 +327,14 @@ const chooseCurrentDir = () => {
         return;
     }
     path.value = browserDir.value;
-    pickerOpen.value = false;
 };
 
-const navigateUp = async () => {
-    if (!browserDir.value) {
-        await loadDirectory(browserRoot.value || "");
+const handleEntryDoubleClick = async (entry) => {
+    if (entry.isDir) {
+        await loadDirectory(entry.path);
         return;
     }
-    let parent = parentDirectory(browserDir.value);
-    const root = normalizeComparePath(browserRoot.value);
-    if (root !== "" && normalizeComparePath(parent).length < root.length) {
-        parent = browserRoot.value;
-    }
-    await loadDirectory(parent || browserRoot.value || "");
-};
-
-const refreshBrowser = async () => {
-    await loadDirectory(browserDir.value || browserRoot.value || "");
+    choosePath(entry.path);
 };
 
 const postForm = async (url) => {
@@ -430,6 +443,10 @@ const copyOutput = async () => {
         copyLabel.value = original;
     }, 1200);
 };
+
+onMounted(async () => {
+    await loadDirectory("");
+});
 
 onBeforeUnmount(() => {
     if (browserController) {
