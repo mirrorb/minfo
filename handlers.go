@@ -323,7 +323,6 @@ func captureShot(ctx context.Context, ffmpeg, path string, seconds float64, outP
         "-skip_frame", "nokey",
         "-i", path,
         "-frames:v", "1",
-        "-q:v", "2",
         "-an",
         outPath,
     )
@@ -351,7 +350,6 @@ func captureShot(ctx context.Context, ffmpeg, path string, seconds float64, outP
         "-ss", postTS,
         "-t", "1",
         "-frames:v", "1",
-        "-q:v", "2",
         "-an",
         outPath,
     )
