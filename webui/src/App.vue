@@ -371,21 +371,92 @@ const postForm = async (url, extras = {}) => {
     return fetch(url, { method: "POST", body: form });
 };
 
-const getDownloadFilename = (res, fallback) => {
-    const header = res.headers.get("content-disposition") || "";
-    const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
-    if (utf8Match && utf8Match[1]) {
-        try {
-            return decodeURIComponent(utf8Match[1]);
-        } catch (err) {
-            return utf8Match[1];
+const submitDownloadForm = (url, fields = {}) => {
+    return new Promise((resolve, reject) => {
+        const frameName = `download-frame-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const iframe = document.createElement("iframe");
+        iframe.name = frameName;
+        iframe.style.display = "none";
+
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = url;
+        form.target = frameName;
+        form.style.display = "none";
+
+        const addField = (name, rawValue) => {
+            if (rawValue === undefined || rawValue === null) {
+                return;
+            }
+            const value = `${rawValue}`;
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        };
+
+        addField("path", path.value.trim());
+        for (const [key, value] of Object.entries(fields)) {
+            addField(key, value);
         }
-    }
-    const plainMatch = header.match(/filename="?([^";]+)"?/i);
-    if (plainMatch && plainMatch[1]) {
-        return plainMatch[1];
-    }
-    return fallback;
+
+        let submitted = false;
+        let settled = false;
+
+        const cleanup = () => {
+            window.setTimeout(() => {
+                iframe.remove();
+                form.remove();
+            }, 0);
+        };
+
+        const finishResolve = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            resolve();
+        };
+
+        const finishReject = (message) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            reject(new Error(message));
+        };
+
+        const timer = window.setTimeout(() => {
+            finishResolve();
+        }, 1200);
+
+        iframe.addEventListener("load", () => {
+            if (!submitted || settled) {
+                return;
+            }
+            try {
+                const doc = iframe.contentDocument;
+                const text = (doc?.body?.textContent || "").trim();
+                if (text === "") {
+                    return;
+                }
+                const data = JSON.parse(text);
+                if (data && data.ok === false) {
+                    window.clearTimeout(timer);
+                    finishReject(data.error || "截图请求失败。");
+                }
+            } catch (err) {
+            }
+        });
+
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        submitted = true;
+        form.submit();
+    });
 };
 
 const runInfo = async (url, label) => {
@@ -421,32 +492,8 @@ const downloadShots = async () => {
     try {
         const compressed = compressedShots.value;
         setBusy(true, compressed ? "正在生成压制截图（单张<10 MiB）..." : "正在生成无损截图...");
-        const res = await postForm("/api/screenshots", { screenshot_mode: compressed ? "compressed" : "lossless" });
-        if (!res.ok) {
-            let data = {};
-            try {
-                data = await res.json();
-            } catch (err) {
-                data = {};
-            }
-            throw new Error(data.error || "截图请求失败。");
-        }
-        const blob = await res.blob();
-        if (!blob || blob.size === 0) {
-            throw new Error("截图结果为空。");
-        }
-        const url = window.URL.createObjectURL(blob);
-        const filename = getDownloadFilename(res, compressed ? "screenshots-compressed.zip" : "screenshots.zip");
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.setTimeout(() => {
-            window.URL.revokeObjectURL(url);
-        }, 1000);
-        appendOutput(`截图已下载为 ${filename}。`);
+        await submitDownloadForm("/api/screenshots", { screenshot_mode: compressed ? "compressed" : "lossless" });
+        appendOutput("截图下载已发起，请查看浏览器或下载器。");
     } catch (err) {
         errorOutput(err && err.message ? err.message : "截图请求失败。");
     } finally {
