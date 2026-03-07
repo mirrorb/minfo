@@ -382,6 +382,7 @@ const submitDownloadForm = (url, fields = {}) => {
         form.method = "POST";
         form.action = url;
         form.target = frameName;
+        form.enctype = "multipart/form-data";
         form.style.display = "none";
 
         const addField = (name, rawValue) => {
