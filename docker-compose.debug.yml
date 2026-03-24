@@ -1,0 +1,20 @@
+services:
+  minfo-debug:
+    image: ${MINFO_DEBUG_IMAGE:-minfo-debug}
+    container_name: ${MINFO_DEBUG_CONTAINER_NAME:-minfo-debug}
+    build:
+      context: .
+      target: debug
+    privileged: true
+    ports:
+      - "${HOST_PORT:-28080}:${PORT:-28080}"
+      - "${DLV_HOST_PORT:-2345}:2345"
+    environment:
+      PORT: "${PORT:-28080}"
+      REQUEST_TIMEOUT: "${REQUEST_TIMEOUT:-20m}"
+    working_dir: ${PWD:-/opt/minfo}
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - .:${PWD:-/opt/minfo}
+      - ${MEDIA_PATH_1:-./test-media}:/media_path1:ro
+    restart: unless-stopped

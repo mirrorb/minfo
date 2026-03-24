@@ -11,50 +11,7 @@ import (
 	"minfo/internal/system"
 )
 
-func NewInfoHandler(envKey, fallback string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !transport.EnsurePost(w, r) {
-			return
-		}
-		if err := transport.ParseForm(w, r); err != nil {
-			transport.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		defer transport.CleanupMultipart(r)
-
-		path, cleanup, err := transport.InputPath(r)
-		if err != nil {
-			transport.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		defer cleanup()
-
-		bin, err := system.ResolveBin(envKey, fallback)
-		if err != nil {
-			transport.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), config.RequestTimeout)
-		defer cancel()
-
-		stdout, stderr, err := system.RunCommand(ctx, bin, path)
-		if err != nil {
-			transport.WriteError(w, http.StatusInternalServerError, system.BestErrorMessage(err, stderr, stdout))
-			return
-		}
-
-		output := system.CombineCommandOutput(stdout, stderr)
-		if output == "" {
-			transport.WriteError(w, http.StatusInternalServerError, "mediainfo returned empty output")
-			return
-		}
-
-		transport.WriteJSON(w, http.StatusOK, transport.InfoResponse{OK: true, Output: output})
-	}
-}
-
-func NewMediaInfoHandler(envKey, fallback string) http.HandlerFunc {
+func MediaInfoHandler(envKey, fallback string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !transport.EnsurePost(w, r) {
 			return
@@ -113,7 +70,7 @@ func NewMediaInfoHandler(envKey, fallback string) http.HandlerFunc {
 	}
 }
 
-func NewBDInfoHandler(envKey, fallback string) http.HandlerFunc {
+func BDInfoHandler(envKey, fallback string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !transport.EnsurePost(w, r) {
 			return

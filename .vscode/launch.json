@@ -1,0 +1,59 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "本地调试",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "docker compose -f docker-compose.debug.yml up --build --remove-orphans",
+            "cwd": "${workspaceFolder}",
+            "serverReadyAction": {
+                "pattern": "(DAP|API) server listening at:.*:[0-9]+",
+                "action": "startDebugging",
+                "name": "_内部: Go 后端"
+            }
+        },
+        {
+            "name": "_内部: Go 后端",
+            "type": "go",
+            "debugAdapter": "dlv-dap",
+            "request": "launch",
+            "mode": "debug",
+            "host": "127.0.0.1",
+            "port": 2345,
+            "program": "${workspaceFolder}/cmd/minfo",
+            "cwd": "${workspaceFolder}",
+            "buildFlags": "-buildvcs=false",
+            "postDebugTask": "docker-debug: down",
+            "serverReadyAction": {
+                "pattern": "minfo listening on (http://localhost:\\d+)",
+                "action": "startDebugging",
+                "name": "_内部: Vite 服务"
+            },
+            "presentation": {
+                "hidden": true
+            }
+        },
+        {
+            "name": "_内部: Vite 服务",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./scripts/run-webui-dev.sh",
+            "cwd": "${workspaceFolder}",
+            "serverReadyAction": {
+                "pattern": "Local:\\s+(http://localhost:\\d+/?)",
+                "action": "openExternally"
+            },
+            "presentation": {
+                "hidden": true
+            }
+        },
+        {
+            "name": "发布前测试",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./scripts/run-docker-release-follow.sh",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

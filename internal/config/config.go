@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DefaultPort           = "8080"
+	DefaultPort           = "28080"
 	DefaultRoot           = "/media"
 	MaxUploadBytes        = int64(8 << 30)
 	MaxMemoryBytes        = int64(32 << 20)

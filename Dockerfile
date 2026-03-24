@@ -6,6 +6,7 @@ ARG SCREENSHOT_UPLOAD_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs
 ARG SCREENSHOT_PNG_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots.sh
 ARG SCREENSHOT_FAST_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots_fast.sh
 ARG SCREENSHOT_JPG_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots_jpg.sh
+ARG GO_VERSION=1.26.1
 
 # 构建 WebUI
 FROM --platform=$BUILDPLATFORM node:20-alpine AS webui
@@ -16,7 +17,7 @@ COPY webui .
 RUN npm run build
 
 # 构建 Go 后端
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 COPY *.go ./
@@ -68,7 +69,7 @@ RUN set -eux; \
     find /out/bdinfo -type f \( -name '*.pdb' -o -name '*.xml' -o -name '*.dbg' \) -delete
 
 # 最终运行环境 (Alpine)
-FROM alpine:3.19
+FROM alpine:3.19 AS runtime
 ARG SCREENSHOT_AUTO_URL
 ARG SCREENSHOT_UPLOAD_URL
 ARG SCREENSHOT_PNG_URL
@@ -115,8 +116,53 @@ RUN chmod +x /usr/local/bin/bdinfo /usr/local/bin/minfo /opt/bdinfo/BDInfo
 ENV BDINFO_BIN=/usr/local/bin/bdinfo
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-ENV PORT=8080
+ENV PORT=28080
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
-EXPOSE 8080
+EXPOSE 28080
 ENTRYPOINT ["/usr/local/bin/minfo"]
+
+# 本地调试环境 (Go + Delve + 运行依赖)
+FROM golang:${GO_VERSION}-alpine AS debug
+RUN apk add --no-cache \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    mediainfo \
+    kmod \
+    libgdiplus \
+    findutils \
+    util-linux \
+    libstdc++ \
+    libgcc \
+    tzdata \
+    bash \
+    jq \
+    bc \
+    file \
+    coreutils
+
+RUN GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest
+
+COPY --from=runtime /opt/minfo/scripts /opt/minfo/scripts
+COPY --from=runtime /opt/bdinfo /opt/bdinfo
+COPY --from=runtime /usr/local/bin/bdinfo /usr/local/bin/bdinfo
+COPY --from=runtime /usr/local/bin/sudo /usr/local/bin/sudo
+
+RUN chmod +x /usr/local/bin/dlv /usr/local/bin/bdinfo /usr/local/bin/sudo /opt/bdinfo/BDInfo /opt/minfo/scripts/*.sh
+
+ENV BDINFO_BIN=/usr/local/bin/bdinfo
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV PORT=28080
+ENV GOCACHE=/tmp/go-build
+ENV GOROOT=/usr/local/go
+ENV PATH=/usr/local/go/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+
+WORKDIR /opt/minfo
+EXPOSE 28080 2345
+CMD ["dlv", "dap", "--listen=:2345"]
+
+# 默认最终镜像保持为运行环境，避免 `docker build .` 误落到 debug stage。
+FROM runtime AS final

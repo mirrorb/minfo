@@ -2,6 +2,9 @@
 import vue from "@vitejs/plugin-vue";
 import path from "node:path";
 
+const apiTarget = process.env.VITE_API_TARGET || "http://127.0.0.1:28080";
+const devPort = Number(process.env.WEBUI_PORT || process.env.VITE_PORT || 28081);
+
 export default defineConfig({
   plugins: [vue()],
   base: "/",
@@ -16,8 +19,15 @@ export default defineConfig({
     },
   },
   server: {
+    host: "0.0.0.0",
+    port: devPort,
+    strictPort: true,
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
     proxy: {
-      "/api": "http://localhost:8080",
+      "/api": apiTarget,
     },
   },
 });

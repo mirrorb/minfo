@@ -4,3 +4,6 @@
 /webui/.vite/
 /webui/dist/
 .gocache
+.env
+__debug_bin*
+/test-media

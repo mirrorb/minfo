@@ -1,0 +1,102 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "webui: install",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "webui-install"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "webui: build",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "webui-build"
+            ],
+            "hide": true,
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-debug: up",
+            "type": "shell",
+            "command": "./scripts/docker-debug-up.sh",
+            "args": [
+                "up"
+            ],
+            "hide": true,
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-debug: down",
+            "type": "shell",
+            "command": "./scripts/docker-debug-down.sh",
+            "hide": true,
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "webui: dev",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "webui-dev"
+            ],
+            "hide": true,
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "release-check",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "release-check"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

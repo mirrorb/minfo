@@ -1,17 +1,19 @@
 services:
   minfo:
-    build: .
+    image: ${MINFO_IMAGE:-minfo-local}
+    container_name: ${MINFO_CONTAINER_NAME:-minfo-local}
+    build:
+      context: .
+      target: runtime
     privileged: true
     ports:
-      - "28081:8080"
+      - "${HOST_PORT:-28080}:${PORT:-28080}"
     environment:
-      PORT: "8080"
-      WEB_PASSWORD: "adminadmin"
-      REQUEST_TIMEOUT: "20m"
+      PORT: "${PORT:-28080}"
+      REQUEST_TIMEOUT: "${REQUEST_TIMEOUT:-20m}"
+      WEB_USERNAME: "${WEB_USERNAME:-}"
+      WEB_PASSWORD: "${WEB_PASSWORD:-}"
     volumes:
       - /lib/modules:/lib/modules:ro # 程序会自动尝试加载 `udf` 内核模块用于挂载ISO
-      - /your/media/path1:/media_path1:ro
-      - /your/media/path2:/media_path2:ro
-      - /your/media/path3:/media_path3:ro
-      - /your/media/path4:/media_path4:ro
+      - ${MEDIA_PATH_1:-./test-media}:/media_path1:ro
     restart: unless-stopped
