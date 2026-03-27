@@ -27,7 +27,7 @@ services:
       WEB_PASSWORD: "passpass" # 请修改默认用户名密码
       REQUEST_TIMEOUT: "20m"
     volumes:
-      - /lib/modules:/lib/modules:ro # 用于挂载ISO
+      - /lib/modules:/lib/modules:ro # 用于挂载ISO，保持默认
       - /your/media/path1:/media_path1:ro
       - /your/media/path2:/media_path2:ro
     restart: unless-stopped
