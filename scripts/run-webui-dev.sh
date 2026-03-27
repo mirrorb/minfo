@@ -11,8 +11,8 @@ if [[ -f .env ]]; then
     set +a
 fi
 
-PORT="${PORT:-28080}"
-WEBUI_PORT="${WEBUI_PORT:-28081}"
-VITE_API_TARGET="${VITE_API_TARGET:-http://127.0.0.1:${PORT}}"
+DEBUG_HOST_PORT="${DEBUG_HOST_PORT:-48080}"
+WEBUI_PORT="${WEBUI_PORT:-48081}"
+VITE_API_TARGET="${VITE_API_TARGET:-http://127.0.0.1:${DEBUG_HOST_PORT}}"
 
 exec make webui-dev

@@ -7,7 +7,7 @@ services:
       target: runtime
     privileged: true
     ports:
-      - "${HOST_PORT:-28080}:${PORT:-28080}"
+      - "${HOST_PORT:-38080}:${PORT:-28080}"
     environment:
       PORT: "${PORT:-28080}"
       REQUEST_TIMEOUT: "${REQUEST_TIMEOUT:-20m}"

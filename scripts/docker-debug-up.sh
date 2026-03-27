@@ -13,7 +13,7 @@ fi
 
 MODE="${1:-dlv}"
 LOCK_DIR="${TMPDIR:-/tmp}/minfo-docker-debug.lock"
-PORT_VALUE="${PORT:-28080}"
+DEBUG_HOST_PORT_VALUE="${DEBUG_HOST_PORT:-48080}"
 DLV_HOST_PORT_VALUE="${DLV_HOST_PORT:-2345}"
 DEBUG_SERVICE="${DEBUG_SERVICE:-minfo-debug}"
 
@@ -49,7 +49,7 @@ case "$MODE" in
     ready)
         cleanup_lock
         trap - EXIT
-        if wait_for_port "$PORT_VALUE"; then
+        if wait_for_port "$DEBUG_HOST_PORT_VALUE"; then
             exit 0
         fi
         ;;

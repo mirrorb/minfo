@@ -7,7 +7,7 @@ services:
       target: debug
     privileged: true
     ports:
-      - "${HOST_PORT:-28080}:${PORT:-28080}"
+      - "${DEBUG_HOST_PORT:-48080}:${PORT:-28080}"
       - "${DLV_HOST_PORT:-2345}:2345"
     environment:
       PORT: "${PORT:-28080}"

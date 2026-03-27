@@ -8,7 +8,7 @@ endif
 GO ?= go
 NPM ?= npm
 PORT ?= 28080
-WEBUI_PORT ?= 28081
+WEBUI_PORT ?= 48081
 GOCACHE ?= $(CURDIR)/.gocache
 WEBUI_DIR := webui
 BINARY := ./bin/minfo
@@ -16,7 +16,7 @@ BINARY := ./bin/minfo
 help:
 	@printf '%s\n' \
 		'make webui-install  # 安装前端依赖' \
-		'make webui-dev      # 启动前端 Vite 开发服务器 (28081)' \
+		'make webui-dev      # 启动前端 Vite 开发服务器 (48081)' \
 		'make backend-dev    # 启动 Go 后端 (28080)' \
 		'make test           # 运行 Go 测试' \
 		'make build          # 先构建前端，再构建 Go 二进制' \

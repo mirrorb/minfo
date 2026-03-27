@@ -54,6 +54,13 @@
             "request": "launch",
             "command": "./scripts/run-docker-release-follow.sh",
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "发布前测试 (远程)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./scripts/run-remote-release.sh && exit",
+            "cwd": "${workspaceFolder}"
         }
     ]
 }
