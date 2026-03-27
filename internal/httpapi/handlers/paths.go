@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"minfo/internal/config"
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/media"
 )
@@ -23,7 +22,7 @@ func PathSuggestHandler(w http.ResponseWriter, r *http.Request) {
 	prefix := strings.TrimSpace(r.URL.Query().Get("prefix"))
 	prefix = strings.Trim(prefix, "\"")
 
-	items, root, err := media.SuggestPaths(roots, prefix, config.MaxSuggestions)
+	items, root, err := media.SuggestPaths(roots, prefix, 0)
 	if err != nil {
 		transport.WritePathError(w, http.StatusBadRequest, err.Error())
 		return

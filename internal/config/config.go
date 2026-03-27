@@ -12,7 +12,6 @@ const (
 	DefaultRoot           = "/media"
 	MaxUploadBytes        = int64(8 << 30)
 	MaxMemoryBytes        = int64(32 << 20)
-	MaxSuggestions        = 200
 	MountTimeout          = 30 * time.Second
 	UmountTimeout         = 30 * time.Second
 	DefaultRequestTimeout = 10 * time.Minute
