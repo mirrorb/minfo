@@ -5,6 +5,7 @@ const DEFAULT_STATE = {
     path: "",
     browserDir: "",
     screenshotVariant: "png",
+    bdinfoMode: "code",
     outputText: "",
     linkItems: [],
 };
@@ -43,6 +44,7 @@ function normalizeState(value) {
         path: typeof source.path === "string" ? source.path : DEFAULT_STATE.path,
         browserDir: typeof source.browserDir === "string" ? source.browserDir : DEFAULT_STATE.browserDir,
         screenshotVariant: normalizeVariant(source.screenshotVariant),
+        bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
         outputText: typeof source.outputText === "string" ? source.outputText : DEFAULT_STATE.outputText,
         linkItems: normalizeOutputLinks(source.linkItems),
     };
@@ -50,6 +52,10 @@ function normalizeState(value) {
 
 function normalizeVariant(value) {
     return ["png", "jpg", "fast"].includes(value) ? value : DEFAULT_STATE.screenshotVariant;
+}
+
+function normalizeBDInfoMode(value) {
+    return value === "full" ? "full" : DEFAULT_STATE.bdinfoMode;
 }
 
 function isStorageAvailable() {

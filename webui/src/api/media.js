@@ -12,8 +12,8 @@ export async function fetchDirectory(prefix = "", signal) {
     return data;
 }
 
-export async function requestInfo(path, url) {
-    const response = await postForm(url, { path });
+export async function requestInfo(path, url, fields = {}) {
+    const response = await postForm(url, { path, ...fields });
     const data = await safeReadJSON(response);
     if (!response.ok || !data.ok) {
         throw new Error(data.error || "请求失败。");

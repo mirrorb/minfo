@@ -36,14 +36,14 @@ export function useMediaActions(path, screenshotVariant, hasInput, options = {})
         setLinkStatusText(`错误：${message}`);
     };
 
-    const runInfo = async (url, label) => {
+    const runInfo = async (url, label, fields = {}) => {
         if (!hasInput.value) {
             errorOutput("请先选择媒体路径。");
             return;
         }
         try {
             setBusy(true, `${label} 生成中...`);
-            const data = await requestInfo(path.value.trim(), url);
+            const data = await requestInfo(path.value.trim(), url, fields);
             setOutputText(data.output || "没有输出。");
         } catch (err) {
             errorOutput(err?.message || "请求失败。");

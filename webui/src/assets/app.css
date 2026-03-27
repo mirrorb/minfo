@@ -105,8 +105,51 @@ h1 {
   margin-bottom: 18px;
 }
 
+.panel-section {
+  display: grid;
+  gap: 16px;
+}
+
+.panel-section + .panel-section {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(33, 50, 60, 0.1);
+}
+
+.panel-section-header {
+  display: grid;
+  gap: 0;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(47, 111, 109, 0.05);
+  border: 1px solid rgba(47, 111, 109, 0.1);
+}
+
+.config-grid .field {
+  margin-bottom: 0;
+}
+
+.panel-section-actions .actions {
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(195, 101, 47, 0.05);
+  border: 1px solid rgba(195, 101, 47, 0.12);
+}
+
 label {
   font-weight: 600;
+}
+
+.field-label-muted {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 input[type="file"],
@@ -496,6 +539,10 @@ pre {
 
   .shell {
     padding: 32px 20px 48px;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
   }
 
   .browser-row {

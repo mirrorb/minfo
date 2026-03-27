@@ -18,19 +18,36 @@
                 @open-entry="handleEntryDoubleClick"
             />
 
-            <div class="field">
-                <label>截图模式</label>
-                <ScreenshotVariantPicker v-model="screenshotVariant" :busy="busy" />
+            <div class="panel-section">
+                <div class="panel-section-header">
+                    <label>配置</label>
+                </div>
+                <div class="config-grid">
+                    <div class="field">
+                        <label class="field-label-muted">截图模式</label>
+                        <ScreenshotVariantPicker v-model="screenshotVariant" :busy="busy" />
+                    </div>
+
+                    <div class="field">
+                        <label class="field-label-muted">BDInfo 输出</label>
+                        <BDInfoOutputPicker v-model="bdinfoMode" :busy="busy" />
+                    </div>
+                </div>
             </div>
 
-            <ActionButtons
-                :busy="busy"
-                :has-input="hasInput"
-                @mediainfo="runInfo('/api/mediainfo', 'MediaInfo')"
-                @bdinfo="runInfo('/api/bdinfo', 'BDInfo')"
-                @download-shots="downloadShots"
-                @output-links="outputShotLinks"
-            />
+            <div class="panel-section panel-section-actions">
+                <div class="panel-section-header">
+                    <label>操作</label>
+                </div>
+                <ActionButtons
+                    :busy="busy"
+                    :has-input="hasInput"
+                    @mediainfo="runInfo('/api/mediainfo', 'MediaInfo')"
+                    @bdinfo="runInfo('/api/bdinfo', 'BDInfo', { bdinfo_mode: bdinfoMode })"
+                    @download-shots="downloadShots"
+                    @output-links="outputShotLinks"
+                />
+            </div>
         </section>
 
         <OutputPanel :busy="busy" :copy-output-label="copyOutputLabel" :output-text="outputText" :status-message="statusMessage" @copy="copyOutputText" @clear="clearOutputText" />
@@ -54,6 +71,7 @@
 import { ref, watch } from "vue";
 import ActionButtons from "./components/ActionButtons.vue";
 import AppHeader from "./components/AppHeader.vue";
+import BDInfoOutputPicker from "./components/BDInfoOutputPicker.vue";
 import ImageLinksPanel from "./components/ImageLinksPanel.vue";
 import OutputPanel from "./components/OutputPanel.vue";
 import PathBrowser from "./components/PathBrowser.vue";
@@ -64,6 +82,7 @@ import { loadAppState, saveAppState } from "./utils/storage";
 
 const persistedState = loadAppState();
 const screenshotVariant = ref(persistedState.screenshotVariant);
+const bdinfoMode = ref(persistedState.bdinfoMode);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
@@ -109,12 +128,13 @@ const {
 } = mediaActions;
 
 watch(
-    [path, browserDir, screenshotVariant, outputText, linkItems],
-    ([nextPath, nextBrowserDir, nextVariant, nextOutputText, nextLinkItems]) => {
+    [path, browserDir, screenshotVariant, bdinfoMode, outputText, linkItems],
+    ([nextPath, nextBrowserDir, nextVariant, nextBDInfoMode, nextOutputText, nextLinkItems]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
             screenshotVariant: nextVariant,
+            bdinfoMode: nextBDInfoMode,
             outputText: nextOutputText,
             linkItems: nextLinkItems,
         });
