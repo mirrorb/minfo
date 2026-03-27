@@ -98,12 +98,18 @@ func RunScript(ctx context.Context, inputPath, outputDir, variant string) ([]str
 		return nil, err
 	}
 
-	timestamps, err := randomScreenshotTimestamps(ctx, inputPath, screenshotCount)
+	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	timestamps, err := randomScreenshotTimestampsForSource(ctx, sourcePath, screenshotCount)
 	if err != nil {
 		return nil, err
 	}
 
-	args := append([]string{scriptPath, inputPath, outputDir}, timestamps...)
+	args := append([]string{scriptPath, sourcePath, outputDir}, timestamps...)
 	stdout, stderr, err := system.RunCommand(ctx, "bash", args...)
 	if err != nil {
 		return nil, fmt.Errorf("screenshot generation failed: %s", system.BestErrorMessage(err, stderr, stdout))
@@ -122,12 +128,18 @@ func RunUpload(ctx context.Context, inputPath, outputDir, variant string) (strin
 		return "", err
 	}
 
-	timestamps, err := randomScreenshotTimestamps(ctx, inputPath, screenshotCount)
+	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+
+	timestamps, err := randomScreenshotTimestampsForSource(ctx, sourcePath, screenshotCount)
 	if err != nil {
 		return "", err
 	}
 
-	args := append(screenshotVariantArgs(variant), inputPath, outputDir)
+	args := append(screenshotVariantArgs(variant), sourcePath, outputDir)
 	args = append(args, timestamps...)
 	stdout, stderr, err := system.RunCommand(ctx, "bash", append([]string{autoScript}, args...)...)
 	if err != nil {
@@ -153,16 +165,24 @@ func randomScreenshotTimestamps(ctx context.Context, inputPath string, count int
 		count = screenshotCount
 	}
 
-	ffprobe, err := system.ResolveBin("FFPROBE_BIN", "ffprobe")
-	if err != nil {
-		return nil, err
-	}
-
 	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
+
+	return randomScreenshotTimestampsForSource(ctx, sourcePath, count)
+}
+
+func randomScreenshotTimestampsForSource(ctx context.Context, sourcePath string, count int) ([]string, error) {
+	if count <= 0 {
+		count = screenshotCount
+	}
+
+	ffprobe, err := system.ResolveBin("FFPROBE_BIN", "ffprobe")
+	if err != nil {
+		return nil, err
+	}
 
 	duration, err := probeMediaDuration(ctx, ffprobe, sourcePath)
 	if err != nil {
