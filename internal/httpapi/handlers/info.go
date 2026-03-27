@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -49,7 +50,9 @@ func MediaInfoHandler(envKey, fallback string) http.HandlerFunc {
 
 		var lastErr string
 		for _, sourcePath := range candidates {
-			stdout, stderr, err := system.RunCommand(ctx, bin, sourcePath)
+			sourceDir := filepath.Dir(sourcePath)
+			sourceName := filepath.Base(sourcePath)
+			stdout, stderr, err := system.RunCommandInDir(ctx, sourceDir, bin, sourceName)
 			if err != nil {
 				lastErr = system.BestErrorMessage(err, stderr, stdout)
 				continue

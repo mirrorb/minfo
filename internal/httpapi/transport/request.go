@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -48,24 +49,39 @@ func InputPath(r *http.Request) (string, func(), error) {
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(header.Filename)
-	tempFile, err := os.CreateTemp("", "minfo-*"+ext)
+	tempDir, err := os.MkdirTemp("", "minfo-upload-*")
 	if err != nil {
+		return "", func() {}, err
+	}
+	tempPath := filepath.Join(tempDir, uploadFileName(header.Filename))
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		_ = os.RemoveAll(tempDir)
 		return "", func() {}, err
 	}
 
 	if _, err := io.Copy(tempFile, file); err != nil {
 		tempFile.Close()
-		_ = os.Remove(tempFile.Name())
+		_ = os.RemoveAll(tempDir)
 		return "", func() {}, err
 	}
 	if err := tempFile.Close(); err != nil {
-		_ = os.Remove(tempFile.Name())
+		_ = os.RemoveAll(tempDir)
 		return "", func() {}, err
 	}
 
 	cleanup := func() {
-		_ = os.Remove(tempFile.Name())
+		_ = os.RemoveAll(tempDir)
 	}
 	return tempFile.Name(), cleanup, nil
+}
+
+func uploadFileName(name string) string {
+	cleaned := strings.TrimSpace(name)
+	cleaned = strings.ReplaceAll(cleaned, "\\", "/")
+	cleaned = pathpkg.Base(cleaned)
+	if cleaned == "" || cleaned == "." || cleaned == "/" {
+		return "upload.bin"
+	}
+	return cleaned
 }

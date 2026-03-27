@@ -19,7 +19,16 @@ func ResolveBin(envKey, fallback string) (string, error) {
 }
 
 func RunCommand(ctx context.Context, bin string, args ...string) (string, string, error) {
+	return runCommand(ctx, "", bin, args...)
+}
+
+func RunCommandInDir(ctx context.Context, dir, bin string, args ...string) (string, string, error) {
+	return runCommand(ctx, dir, bin, args...)
+}
+
+func runCommand(ctx context.Context, dir, bin string, args ...string) (string, string, error) {
 	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
 	setCommandProcessGroup(cmd)
 
 	stdoutFile, err := os.CreateTemp("", "minfo-stdout-*")
