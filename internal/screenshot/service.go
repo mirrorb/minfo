@@ -24,10 +24,22 @@ const (
 	ModeZip   = "zip"
 	ModeLinks = "links"
 
-	VariantPNG  = "png"
-	VariantJPG  = "jpg"
-	VariantFast = "fast"
+	VariantPNG = "png"
+	VariantJPG = "jpg"
+
+	SubtitleModeAuto = "auto"
+	SubtitleModeOff  = "off"
 )
+
+type ScriptResult struct {
+	Files []string
+	Logs  string
+}
+
+type UploadResult struct {
+	Output string
+	Logs   string
+}
 
 func NormalizeMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
@@ -42,30 +54,31 @@ func NormalizeVariant(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case VariantJPG:
 		return VariantJPG
-	case VariantFast:
-		return VariantFast
 	default:
 		return VariantPNG
 	}
 }
 
-func screenshotVariantArgs(variant string) []string {
-	switch variant {
-	case VariantJPG:
-		return []string{"-jpg"}
-	case VariantFast:
-		return []string{"-fast"}
+func NormalizeSubtitleMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case SubtitleModeOff, "none", "nosub", "false", "0":
+		return SubtitleModeOff
 	default:
-		return nil
+		return SubtitleModeAuto
 	}
+}
+
+func subtitleModeArgs(mode string) []string {
+	if mode == SubtitleModeOff {
+		return []string{"-nosub"}
+	}
+	return nil
 }
 
 func screenshotScriptName(variant string) string {
 	switch variant {
 	case VariantJPG:
 		return "screenshots_jpg.sh"
-	case VariantFast:
-		return "screenshots_fast.sh"
 	default:
 		return "screenshots.sh"
 	}
@@ -92,58 +105,71 @@ func resolveScript(envKey, fallbackName string) (string, error) {
 	return "", fmt.Errorf("%s not found in %s; rebuild the image or set %s to override", fallbackName, screenshotScriptDir, envKey)
 }
 
-func RunScript(ctx context.Context, inputPath, outputDir, variant string) ([]string, error) {
-	scriptPath, err := resolveScript("SCREENSHOT_SCRIPT", screenshotScriptName(variant))
+func RunScript(ctx context.Context, inputPath, outputDir, variant, subtitleMode string) ([]string, error) {
+	result, err := RunScriptWithLogs(ctx, inputPath, outputDir, variant, subtitleMode)
 	if err != nil {
 		return nil, err
+	}
+	return result.Files, nil
+}
+
+func RunScriptWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string) (ScriptResult, error) {
+	scriptPath, err := resolveScript("SCREENSHOT_SCRIPT", screenshotScriptName(variant))
+	if err != nil {
+		return ScriptResult{}, err
 	}
 
 	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
 	if err != nil {
-		return nil, err
+		return ScriptResult{}, err
 	}
 	defer cleanup()
 
 	timestamps, err := randomScreenshotTimestampsForSource(ctx, sourcePath, screenshotCount)
 	if err != nil {
-		return nil, err
+		return ScriptResult{}, err
 	}
 
-	args := append([]string{scriptPath, sourcePath, outputDir}, timestamps...)
+	args := append([]string{scriptPath}, subtitleModeArgs(subtitleMode)...)
+	args = append(args, sourcePath, outputDir)
+	args = append(args, timestamps...)
 	stdout, stderr, err := system.RunCommand(ctx, "bash", args...)
+	logs := system.CombineCommandOutput(stdout, stderr)
 	if err != nil {
-		return nil, fmt.Errorf("screenshot generation failed: %s", system.BestErrorMessage(err, stderr, stdout))
+		return ScriptResult{Logs: logs}, fmt.Errorf("screenshot generation failed: %s", system.BestErrorMessage(err, stderr, stdout))
 	}
 
 	files, err := listScreenshotFiles(outputDir)
 	if err != nil {
-		return nil, err
+		return ScriptResult{Logs: logs}, err
 	}
-	return files, nil
+	return ScriptResult{Files: files, Logs: logs}, nil
 }
 
-func RunUpload(ctx context.Context, inputPath, outputDir, variant string) (string, error) {
-	autoScript, err := resolveScript("SCREENSHOT_AUTO_SCRIPT", "AutoScreenshot.sh")
+func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode string) (string, error) {
+	result, err := RunUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode)
 	if err != nil {
 		return "", err
 	}
+	return result.Output, nil
+}
 
-	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
+func RunUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string) (UploadResult, error) {
+	uploadScript, err := resolveScript("SCREENSHOT_UPLOAD_SCRIPT", "PixhostUpload.sh")
 	if err != nil {
-		return "", err
-	}
-	defer cleanup()
-
-	timestamps, err := randomScreenshotTimestampsForSource(ctx, sourcePath, screenshotCount)
-	if err != nil {
-		return "", err
+		return UploadResult{}, err
 	}
 
-	args := append(screenshotVariantArgs(variant), sourcePath, outputDir)
-	args = append(args, timestamps...)
-	stdout, stderr, err := system.RunCommand(ctx, "bash", append([]string{autoScript}, args...)...)
+	screenshotResult, err := RunScriptWithLogs(ctx, inputPath, outputDir, variant, subtitleMode)
 	if err != nil {
-		return "", fmt.Errorf("screenshot upload failed: %s", system.BestErrorMessage(err, stderr, stdout))
+		return UploadResult{Logs: screenshotResult.Logs}, err
+	}
+
+	stdout, stderr, err := system.RunCommand(ctx, "bash", uploadScript, outputDir)
+	uploadLogs := system.CombineCommandOutput(stdout, stderr)
+	logs := strings.TrimSpace(strings.Join(filterNonEmptyStrings(screenshotResult.Logs, uploadLogs), "\n\n"))
+	if err != nil {
+		return UploadResult{Logs: logs}, fmt.Errorf("screenshot upload failed: %s", system.BestErrorMessage(err, stderr, stdout))
 	}
 
 	links := extractDirectLinks(stdout)
@@ -153,11 +179,11 @@ func RunUpload(ctx context.Context, inputPath, outputDir, variant string) (strin
 			output = strings.TrimSpace(stderr)
 		}
 		if output == "" {
-			return "", errors.New("pixhost upload completed but returned no links")
+			return UploadResult{Logs: logs}, errors.New("pixhost upload completed but returned no links")
 		}
-		return output, nil
+		return UploadResult{Output: output, Logs: logs}, nil
 	}
-	return strings.Join(links, "\n"), nil
+	return UploadResult{Output: strings.Join(links, "\n"), Logs: logs}, nil
 }
 
 func randomScreenshotTimestamps(ctx context.Context, inputPath string, count int) ([]string, error) {
@@ -382,4 +408,16 @@ func extractDirectLinks(output string) []string {
 		links = append(links, line)
 	}
 	return links
+}
+
+func filterNonEmptyStrings(values ...string) []string {
+	filtered := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		filtered = append(filtered, value)
+	}
+	return filtered
 }

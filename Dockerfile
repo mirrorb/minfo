@@ -1,11 +1,6 @@
 ARG BDINFO_REPO=https://github.com/mirrorb/BDInfo.git
 ARG BDINFO_REF=master
 ARG BDINFO_CSPROJ=BDInfo.Core/BDInfo/BDInfo.csproj
-ARG SCREENSHOT_AUTO_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/AutoScreenshot.sh
-ARG SCREENSHOT_UPLOAD_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/PixhostUpload.sh
-ARG SCREENSHOT_PNG_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots.sh
-ARG SCREENSHOT_FAST_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots_fast.sh
-ARG SCREENSHOT_JPG_URL=https://raw.githubusercontent.com/mirrorb/Seedbox/refs/heads/main/screenshots_jpg.sh
 ARG GO_VERSION=1.26.1
 
 # 构建 WebUI
@@ -70,16 +65,13 @@ RUN set -eux; \
 
 # 最终运行环境 (Alpine)
 FROM alpine:3.19 AS runtime
-ARG SCREENSHOT_AUTO_URL
-ARG SCREENSHOT_UPLOAD_URL
-ARG SCREENSHOT_PNG_URL
-ARG SCREENSHOT_FAST_URL
-ARG SCREENSHOT_JPG_URL
 RUN apk add --no-cache \
     ca-certificates \
     curl \
     ffmpeg \
     mediainfo \
+    fontconfig \
+    font-noto-cjk \
     kmod \
     libgdiplus \
     findutils \
@@ -93,17 +85,9 @@ RUN apk add --no-cache \
     file \
     coreutils
 
+COPY scripts/seedbox/ /usr/local/share/minfo/scripts/
+
 RUN set -eux; \
-    mkdir -p /usr/local/share/minfo/scripts; \
-    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL "$SCREENSHOT_AUTO_URL" -o /usr/local/share/minfo/scripts/AutoScreenshot.sh; \
-    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL "$SCREENSHOT_UPLOAD_URL" -o /usr/local/share/minfo/scripts/PixhostUpload.sh; \
-    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL "$SCREENSHOT_PNG_URL" -o /usr/local/share/minfo/scripts/screenshots.sh; \
-    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL "$SCREENSHOT_FAST_URL" -o /usr/local/share/minfo/scripts/screenshots_fast.sh; \
-    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL "$SCREENSHOT_JPG_URL" -o /usr/local/share/minfo/scripts/screenshots_jpg.sh; \
-    sed -i 's#bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots_jpg.sh)#bash /usr/local/share/minfo/scripts/screenshots_jpg.sh#g' /usr/local/share/minfo/scripts/AutoScreenshot.sh; \
-    sed -i 's#bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots_fast.sh)#bash /usr/local/share/minfo/scripts/screenshots_fast.sh#g' /usr/local/share/minfo/scripts/AutoScreenshot.sh; \
-    sed -i 's#bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/screenshots.sh)#bash /usr/local/share/minfo/scripts/screenshots.sh#g' /usr/local/share/minfo/scripts/AutoScreenshot.sh; \
-    sed -i 's#bash <(curl -s https://raw.githubusercontent.com/guyuanwind/Seedbox/refs/heads/main/PixhostUpload.sh)#bash /usr/local/share/minfo/scripts/PixhostUpload.sh#g' /usr/local/share/minfo/scripts/AutoScreenshot.sh; \
     printf '#!/bin/sh\nexec "$@"\n' > /usr/local/bin/sudo; \
     chmod +x /usr/local/bin/sudo /usr/local/share/minfo/scripts/*.sh
 
@@ -129,6 +113,8 @@ RUN apk add --no-cache \
     curl \
     ffmpeg \
     mediainfo \
+    fontconfig \
+    font-noto-cjk \
     kmod \
     libgdiplus \
     findutils \

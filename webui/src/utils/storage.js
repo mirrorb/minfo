@@ -3,6 +3,7 @@ const DEFAULT_STATE = {
     path: "",
     browserDir: "",
     screenshotVariant: "png",
+    screenshotSubtitleMode: "auto",
     bdinfoMode: "code",
 };
 
@@ -40,12 +41,17 @@ function normalizeState(value) {
         path: typeof source.path === "string" ? source.path : DEFAULT_STATE.path,
         browserDir: typeof source.browserDir === "string" ? source.browserDir : DEFAULT_STATE.browserDir,
         screenshotVariant: normalizeVariant(source.screenshotVariant),
+        screenshotSubtitleMode: normalizeSubtitleMode(source.screenshotSubtitleMode),
         bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
     };
 }
 
 function normalizeVariant(value) {
-    return ["png", "jpg", "fast"].includes(value) ? value : DEFAULT_STATE.screenshotVariant;
+    return ["png", "jpg"].includes(value) ? value : DEFAULT_STATE.screenshotVariant;
+}
+
+function normalizeSubtitleMode(value) {
+    return value === "off" ? "off" : DEFAULT_STATE.screenshotSubtitleMode;
 }
 
 function normalizeBDInfoMode(value) {

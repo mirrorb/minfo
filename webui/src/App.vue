@@ -33,6 +33,10 @@
                         <label class="field-label-muted">BDInfo 输出</label>
                         <BDInfoOutputPicker v-model="bdinfoMode" :busy="busy" />
                     </div>
+                    <div class="field">
+                        <label class="field-label-muted">字幕处理</label>
+                        <ScreenshotSubtitleModePicker v-model="screenshotSubtitleMode" :busy="busy" />
+                    </div>
                 </div>
             </div>
 
@@ -87,6 +91,7 @@ import ImageLinksPanel from "./components/ImageLinksPanel.vue";
 import NoticeToast from "./components/NoticeToast.vue";
 import OutputPanel from "./components/OutputPanel.vue";
 import PathBrowser from "./components/PathBrowser.vue";
+import ScreenshotSubtitleModePicker from "./components/ScreenshotSubtitleModePicker.vue";
 import ScreenshotVariantPicker from "./components/ScreenshotVariantPicker.vue";
 import { useMediaActions } from "./composables/useMediaActions";
 import { usePathBrowser } from "./composables/usePathBrowser";
@@ -94,12 +99,13 @@ import { loadAppState, saveAppState } from "./utils/storage";
 
 const persistedState = loadAppState();
 const screenshotVariant = ref(persistedState.screenshotVariant);
+const screenshotSubtitleMode = ref(persistedState.screenshotSubtitleMode);
 const bdinfoMode = ref(persistedState.bdinfoMode);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
 });
-const mediaActions = useMediaActions(pathBrowser.path, screenshotVariant, pathBrowser.hasInput);
+const mediaActions = useMediaActions(pathBrowser.path, screenshotVariant, screenshotSubtitleMode, pathBrowser.hasInput);
 
 const {
     path,
@@ -141,12 +147,13 @@ const {
 } = mediaActions;
 
 watch(
-    [path, browserDir, screenshotVariant, bdinfoMode],
-    ([nextPath, nextBrowserDir, nextVariant, nextBDInfoMode]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, bdinfoMode],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextBDInfoMode]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
             screenshotVariant: nextVariant,
+            screenshotSubtitleMode: nextSubtitleMode,
             bdinfoMode: nextBDInfoMode,
         });
     },

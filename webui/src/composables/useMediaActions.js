@@ -2,7 +2,7 @@ import { computed, ref, watch } from "vue";
 import { prepareScreenshotZipDownload, requestInfo, requestScreenshotLinks, startPreparedDownload } from "../api/media";
 import { buildBBCodeText, buildCopyText, buildLinkText, copyText, extractDirectLinks, mergeOutputLinks } from "../utils/output";
 
-export function useMediaActions(path, screenshotVariant, hasInput) {
+export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, hasInput) {
     const outputText = ref("");
     const linkItems = ref([]);
     const busy = ref(false);
@@ -73,6 +73,20 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
         }, 2400);
     };
 
+    const logScreenshotLogs = (label, logs, isError = false) => {
+        if (typeof logs !== "string" || logs.trim() === "") {
+            return;
+        }
+        const prefix = `[screenshots] ${label}`;
+        if (isError) {
+            console.error(prefix);
+            console.error(logs);
+            return;
+        }
+        console.log(prefix);
+        console.log(logs);
+    };
+
     watch(path, (nextValue, previousValue) => {
         if (normalizeTargetPath(nextValue) === normalizeTargetPath(previousValue)) {
             return;
@@ -109,10 +123,12 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
         try {
             activateOutputPanel();
             setBusy(true, "正在生成截图...", "download-shots");
-            const downloadURL = await prepareScreenshotZipDownload(path.value.trim(), screenshotVariant.value);
+            const { downloadURL, logs } = await prepareScreenshotZipDownload(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value);
+            logScreenshotLogs("download", logs);
             startPreparedDownload(downloadURL);
             setOutputText("截图已生成。");
         } catch (err) {
+            logScreenshotLogs("download failed", err?.logs, true);
             clearOutputState();
             hidePanels();
             showNotice(err?.message || "截图请求失败。");
@@ -130,7 +146,8 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
             activateImageLinksPanel(true);
             setBusy(true, "", "output-links");
             setLinkStatusText("正在生成截图并上传...");
-            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value);
+            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value);
+            logScreenshotLogs("upload", data.logs);
             const output = data.output || "";
             const links = extractDirectLinks(output);
 
@@ -150,6 +167,7 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
 
             setLinkStatusText(output || "没有返回图床链接。");
         } catch (err) {
+            logScreenshotLogs("upload failed", err?.logs, true);
             clearLinkState();
             hidePanels();
             showNotice(err?.message || "图床链接请求失败。");
@@ -168,7 +186,8 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
             activateImageLinksPanel(false);
             setBusy(true);
             setLinkStatusText("正在生成截图并上传...");
-            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value);
+            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value);
+            logScreenshotLogs("upload", data.logs);
             const output = data.output || "";
             const links = extractDirectLinks(output);
 
@@ -188,6 +207,7 @@ export function useMediaActions(path, screenshotVariant, hasInput) {
 
             setLinkStatusText(output || "没有返回图床链接。");
         } catch (err) {
+            logScreenshotLogs("upload failed", err?.logs, true);
             setLinkStatusText(previousStatusText);
             showNotice(err?.message || "图床链接请求失败。");
         } finally {

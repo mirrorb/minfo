@@ -3,20 +3,20 @@
         <button
             type="button"
             class="ghost variant-option"
-            :class="{ active: modelValue === 'png' }"
+            :class="{ active: modelValue === 'auto' }"
             :disabled="busy"
-            @click="$emit('update:modelValue', 'png')"
+            @click="$emit('update:modelValue', 'auto')"
         >
-            PNG
+            挂载字幕
         </button>
         <button
             type="button"
             class="ghost variant-option"
-            :class="{ active: modelValue === 'jpg' }"
+            :class="{ active: modelValue === 'off' }"
             :disabled="busy"
-            @click="$emit('update:modelValue', 'jpg')"
+            @click="$emit('update:modelValue', 'off')"
         >
-            JPG
+            纯净截图
         </button>
     </div>
 </template>

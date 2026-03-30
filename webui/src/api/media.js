@@ -21,13 +21,16 @@ export async function requestInfo(path, url, fields = {}) {
     return data;
 }
 
-export async function prepareScreenshotZipDownload(path, variant) {
-    const response = await postForm("/api/screenshots", { path, mode: "zip", variant, prepare_download: "1" });
+export async function prepareScreenshotZipDownload(path, variant, subtitleMode) {
+    const response = await postForm("/api/screenshots", { path, mode: "zip", variant, subtitle_mode: subtitleMode, prepare_download: "1" });
     const data = await safeReadJSON(response);
     if (!response.ok || !data.ok || typeof data.output !== "string" || data.output.trim() === "") {
-        throw new Error(data.error || "截图请求失败。");
+        throw buildResponseError(data.error || "截图请求失败。", data);
     }
-    return new URL(data.output, window.location.origin).toString();
+    return {
+        downloadURL: new URL(data.output, window.location.origin).toString(),
+        logs: typeof data.logs === "string" ? data.logs : "",
+    };
 }
 
 export function startPreparedDownload(url) {
@@ -39,11 +42,11 @@ export function startPreparedDownload(url) {
     anchor.remove();
 }
 
-export async function requestScreenshotLinks(path, variant) {
-    const response = await postForm("/api/screenshots", { path, mode: "links", variant });
+export async function requestScreenshotLinks(path, variant, subtitleMode) {
+    const response = await postForm("/api/screenshots", { path, mode: "links", variant, subtitle_mode: subtitleMode });
     const data = await safeReadJSON(response);
     if (!response.ok || !data.ok) {
-        throw new Error(data.error || "图床链接请求失败。");
+        throw buildResponseError(data.error || "图床链接请求失败。", data);
     }
     return data;
 }
@@ -64,4 +67,12 @@ async function safeReadJSON(response) {
     } catch {
         return {};
     }
+}
+
+function buildResponseError(message, data = {}) {
+    const error = new Error(message);
+    if (typeof data.logs === "string" && data.logs.trim() !== "") {
+        error.logs = data.logs;
+    }
+    return error;
 }
