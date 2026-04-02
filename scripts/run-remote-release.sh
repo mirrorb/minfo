@@ -89,19 +89,21 @@ PROXY_HTTPS="${HTTPS_PROXY:-${https_proxy:-}}"
 BUILDER_NAME="minfo-release-builder"
 
 if [[ -n "$PROXY_HTTP" || -n "$PROXY_HTTPS" ]]; then
-    docker buildx rm "$BUILDER_NAME" >/dev/null 2>&1 || true
+    if docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1; then
+        docker buildx use "$BUILDER_NAME" >/dev/null
+    else
+        buildx_args=(--driver-opt "network=host")
+        if [[ -n "$PROXY_HTTP" ]]; then
+            buildx_args+=(--driver-opt "env.http_proxy=${PROXY_HTTP}")
+            buildx_args+=(--driver-opt "env.HTTP_PROXY=${PROXY_HTTP}")
+        fi
+        if [[ -n "$PROXY_HTTPS" ]]; then
+            buildx_args+=(--driver-opt "env.https_proxy=${PROXY_HTTPS}")
+            buildx_args+=(--driver-opt "env.HTTPS_PROXY=${PROXY_HTTPS}")
+        fi
 
-    buildx_args=(--driver-opt "network=host")
-    if [[ -n "$PROXY_HTTP" ]]; then
-        buildx_args+=(--driver-opt "env.http_proxy=${PROXY_HTTP}")
-        buildx_args+=(--driver-opt "env.HTTP_PROXY=${PROXY_HTTP}")
+        docker buildx create --name "$BUILDER_NAME" --use --driver docker-container "${buildx_args[@]}" >/dev/null
     fi
-    if [[ -n "$PROXY_HTTPS" ]]; then
-        buildx_args+=(--driver-opt "env.https_proxy=${PROXY_HTTPS}")
-        buildx_args+=(--driver-opt "env.HTTPS_PROXY=${PROXY_HTTPS}")
-    fi
-
-    docker buildx create --name "$BUILDER_NAME" --use --driver docker-container "${buildx_args[@]}" >/dev/null
     docker buildx inspect --bootstrap >/dev/null
     export BUILDX_BUILDER="$BUILDER_NAME"
 fi
