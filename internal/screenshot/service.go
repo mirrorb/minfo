@@ -50,6 +50,8 @@ type UploadResult struct {
 	Logs   string
 }
 
+type LogHandler func(line string)
+
 func NormalizeMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case ModeLinks:
@@ -106,7 +108,11 @@ func RunScript(ctx context.Context, inputPath, outputDir, variant, subtitleMode 
 }
 
 func RunScriptWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (ScriptResult, error) {
-	return runNativeScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
+	return RunScriptWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, nil)
+}
+
+func RunScriptWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (ScriptResult, error) {
+	return runNativeScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 }
 
 func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (string, error) {
@@ -118,7 +124,11 @@ func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode 
 }
 
 func RunUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (UploadResult, error) {
-	return runNativeUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
+	return RunUploadWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, nil)
+}
+
+func RunUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (UploadResult, error) {
+	return runNativeUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 }
 
 func randomScreenshotTimestamps(ctx context.Context, inputPath string, count int) ([]string, error) {

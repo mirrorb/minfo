@@ -131,6 +131,7 @@ type nativeScreenshotRunner struct {
 	mediainfoBin     string
 	bdsubBin         string
 	logLines         []string
+	logHandler       LogHandler
 
 	blurayContext            nativeBlurayProbeContext
 	subtitle                 nativeSubtitleSelection
@@ -145,7 +146,7 @@ type nativeScreenshotRunner struct {
 	colorChain  string
 }
 
-func runNativeScreenshotsWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (ScriptResult, error) {
+func runNativeScreenshotsWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (ScriptResult, error) {
 	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
 	if err != nil {
 		return ScriptResult{}, err
@@ -164,10 +165,10 @@ func runNativeScreenshotsWithLogs(ctx context.Context, inputPath, outputDir, var
 		return ScriptResult{}, err
 	}
 
-	return runNativeScreenshotsFromSource(ctx, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, timestamps)
+	return runNativeScreenshotsFromSource(ctx, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, timestamps, onLog)
 }
 
-func runNativeScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode string, timestamps []string) (ScriptResult, error) {
+func runNativeScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode string, timestamps []string, onLog LogHandler) (ScriptResult, error) {
 	runner := &nativeScreenshotRunner{
 		ctx:              ctx,
 		sourcePath:       sourcePath,
@@ -179,6 +180,7 @@ func runNativeScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInf
 		subtitle: nativeSubtitleSelection{
 			Mode: "none",
 		},
+		logHandler: onLog,
 	}
 
 	runner.logf("[信息] 已切换为 Go 截图引擎。")
@@ -1873,7 +1875,11 @@ func (r *nativeScreenshotRunner) logs() string {
 }
 
 func (r *nativeScreenshotRunner) logf(format string, args ...interface{}) {
-	r.logLines = append(r.logLines, fmt.Sprintf(format, args...))
+	line := fmt.Sprintf(format, args...)
+	r.logLines = append(r.logLines, line)
+	if r.logHandler != nil {
+		r.logHandler(line)
+	}
 }
 
 func (r *nativeScreenshotRunner) logSelectedSubtitleSummary() {

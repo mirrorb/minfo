@@ -28,13 +28,13 @@ type nativePixhostResponse struct {
 	ThURL   string `json:"th_url"`
 }
 
-func runNativeUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (UploadResult, error) {
-	screenshotResult, err := runNativeScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
+func runNativeUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (UploadResult, error) {
+	screenshotResult, err := runNativeScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 	if err != nil {
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
 
-	output, uploadLogs, err := uploadFilesToPixhost(ctx, screenshotResult.Files)
+	output, uploadLogs, err := uploadFilesToPixhost(ctx, screenshotResult.Files, onLog)
 	logs := strings.TrimSpace(strings.Join(filterNonEmptyStrings(screenshotResult.Logs, uploadLogs), "\n\n"))
 	if err != nil {
 		return UploadResult{Logs: logs}, err
@@ -42,15 +42,15 @@ func runNativeUploadWithLogs(ctx context.Context, inputPath, outputDir, variant,
 	return UploadResult{Output: output, Logs: logs}, nil
 }
 
-func uploadFilesToPixhost(ctx context.Context, files []string) (string, string, error) {
+func uploadFilesToPixhost(ctx context.Context, files []string, onLog LogHandler) (string, string, error) {
 	logLines := make([]string, 0)
 	images := nativeCollectUploadableImages(files)
 	if len(images) == 0 {
-		logLines = append(logLines, "警告: 未找到有效图片文件")
+		logLines = appendAndPublishLog(logLines, onLog, "警告: 未找到有效图片文件")
 		return "", strings.Join(logLines, "\n"), errors.New("no uploadable screenshots were found")
 	}
 
-	logLines = append(logLines, fmt.Sprintf("开始处理 %d 个文件...", len(images)))
+	logLines = appendAndPublishLog(logLines, onLog, "开始处理 %d 个文件...", len(images))
 	client := &http.Client{}
 	apiURL := config.Getenv("PIXHOST_API_URL", nativePixhostAPIURL)
 
@@ -59,21 +59,30 @@ func uploadFilesToPixhost(ctx context.Context, files []string) (string, string, 
 	for _, imagePath := range images {
 		directURL, err := uploadSinglePixhostImage(ctx, client, apiURL, imagePath)
 		if err != nil {
-			logLines = append(logLines, fmt.Sprintf("上传失败: %s (%s)", filepath.Base(imagePath), err.Error()))
+			logLines = appendAndPublishLog(logLines, onLog, "上传失败: %s (%s)", filepath.Base(imagePath), err.Error())
 			continue
 		}
 		successCount++
 		links = append(links, directURL)
-		logLines = append(logLines, fmt.Sprintf("已上传并校准域名: %s", filepath.Base(imagePath)))
+		logLines = appendAndPublishLog(logLines, onLog, "已上传并校准域名: %s", filepath.Base(imagePath))
 	}
 
-	logLines = append(logLines, "")
-	logLines = append(logLines, fmt.Sprintf("处理完成! 成功: %d/%d", successCount, len(images)))
+	logLines = appendAndPublishLog(logLines, onLog, "")
+	logLines = appendAndPublishLog(logLines, onLog, "处理完成! 成功: %d/%d", successCount, len(images))
 
 	if len(links) == 0 {
 		return "", strings.Join(logLines, "\n"), errors.New("pixhost upload completed but returned no links")
 	}
 	return strings.Join(extractDirectLinks(strings.Join(links, "\n")), "\n"), strings.Join(logLines, "\n"), nil
+}
+
+func appendAndPublishLog(logLines []string, onLog LogHandler, format string, args ...any) []string {
+	line := fmt.Sprintf(format, args...)
+	logLines = append(logLines, line)
+	if onLog != nil {
+		onLog(line)
+	}
+	return logLines
 }
 
 func nativeCollectUploadableImages(paths []string) []string {

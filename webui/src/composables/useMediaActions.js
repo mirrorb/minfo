@@ -1,5 +1,5 @@
 import { computed, ref, watch } from "vue";
-import { prepareScreenshotZipDownload, requestInfo, requestScreenshotLinks, startPreparedDownload } from "../api/media";
+import { createLiveLogStream, prepareScreenshotZipDownload, requestInfo, requestScreenshotLinks, startPreparedDownload } from "../api/media";
 import { buildBBCodeText, buildCopyText, buildLinkText, copyText, extractDirectLinks, mergeOutputLinks } from "../utils/output";
 
 export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotCount, hasInput) {
@@ -73,18 +73,22 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }, 2400);
     };
 
-    const logScreenshotLogs = (label, logs, isError = false) => {
+    const logConsoleLogs = (label, logs, isError = false) => {
         if (typeof logs !== "string" || logs.trim() === "") {
             return;
         }
-        const prefix = `[screenshots] ${label}`;
-        if (isError) {
-            console.error(prefix);
-            console.error(logs);
+        const write = isError ? console.error : console.log;
+        const lines = formatConsoleLogLines(logs);
+        for (const line of lines) {
+            write(`[${label}] ${line}`);
+        }
+    };
+
+    const logConsoleLogsWithFallback = (label, logs, liveStream, isError = false) => {
+        if (liveStream?.hasLiveMessages()) {
             return;
         }
-        console.log(prefix);
-        console.log(logs);
+        logConsoleLogs(label, logs, isError);
     };
 
     watch(path, (nextValue, previousValue) => {
@@ -101,16 +105,21 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             showNotice("请先选择媒体路径。");
             return;
         }
+        const logLabel = action || label.toLowerCase();
+        const liveStream = createLiveLogStream(logLabel);
         try {
             activateOutputPanel();
             setBusy(true, `${label} 生成中...`, action);
-            const data = await requestInfo(path.value.trim(), url, fields);
+            const data = await requestInfo(path.value.trim(), url, fields, { logSession: liveStream.sessionId });
+            logConsoleLogsWithFallback(logLabel, data.logs, liveStream);
             setOutputText(data.output || "没有输出。");
         } catch (err) {
+            logConsoleLogsWithFallback(`${logLabel} failed`, err?.logs, liveStream, true);
             clearOutputState();
             hidePanels();
             showNotice(err?.message || "请求失败。");
         } finally {
+            liveStream.close();
             setBusy(false);
         }
     };
@@ -120,19 +129,23 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             showNotice("请先选择媒体路径。");
             return;
         }
+        const liveStream = createLiveLogStream("screenshots");
         try {
             activateOutputPanel();
             setBusy(true, "正在生成截图...", "download-shots");
-            const { downloadURL, logs } = await prepareScreenshotZipDownload(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value);
-            logScreenshotLogs("download", logs);
+            const { downloadURL, logs } = await prepareScreenshotZipDownload(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value, {
+                logSession: liveStream.sessionId,
+            });
+            logConsoleLogsWithFallback("screenshots download", logs, liveStream);
             startPreparedDownload(downloadURL);
             setOutputText("截图已生成。");
         } catch (err) {
-            logScreenshotLogs("download failed", err?.logs, true);
+            logConsoleLogsWithFallback("screenshots download failed", err?.logs, liveStream, true);
             clearOutputState();
             hidePanels();
             showNotice(err?.message || "截图请求失败。");
         } finally {
+            liveStream.close();
             setBusy(false);
         }
     };
@@ -142,12 +155,15 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             showNotice("请先选择媒体路径。");
             return;
         }
+        const liveStream = createLiveLogStream("screenshots");
         try {
             activateImageLinksPanel(true);
             setBusy(true, "", "output-links");
             setLinkStatusText("正在生成截图并上传...");
-            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value);
-            logScreenshotLogs("upload", data.logs);
+            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value, {
+                logSession: liveStream.sessionId,
+            });
+            logConsoleLogsWithFallback("screenshots upload", data.logs, liveStream);
             const output = data.output || "";
             const links = extractDirectLinks(output);
 
@@ -167,11 +183,12 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
             setLinkStatusText(output || "没有返回图床链接。");
         } catch (err) {
-            logScreenshotLogs("upload failed", err?.logs, true);
+            logConsoleLogsWithFallback("screenshots upload failed", err?.logs, liveStream, true);
             clearLinkState();
             hidePanels();
             showNotice(err?.message || "图床链接请求失败。");
         } finally {
+            liveStream.close();
             setBusy(false);
         }
     };
@@ -182,12 +199,15 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             return;
         }
         const previousStatusText = linkStatusText.value;
+        const liveStream = createLiveLogStream("screenshots");
         try {
             activateImageLinksPanel(false);
             setBusy(true);
             setLinkStatusText("正在生成截图并上传...");
-            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value);
-            logScreenshotLogs("upload", data.logs);
+            const data = await requestScreenshotLinks(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotCount.value, {
+                logSession: liveStream.sessionId,
+            });
+            logConsoleLogsWithFallback("screenshots upload", data.logs, liveStream);
             const output = data.output || "";
             const links = extractDirectLinks(output);
 
@@ -207,10 +227,11 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
             setLinkStatusText(output || "没有返回图床链接。");
         } catch (err) {
-            logScreenshotLogs("upload failed", err?.logs, true);
+            logConsoleLogsWithFallback("screenshots upload failed", err?.logs, liveStream, true);
             setLinkStatusText(previousStatusText);
             showNotice(err?.message || "图床链接请求失败。");
         } finally {
+            liveStream.close();
             setBusy(false);
         }
     };
@@ -338,4 +359,23 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
 function normalizeTargetPath(value) {
     return typeof value === "string" ? value.trim() : "";
+}
+
+function formatConsoleLogLines(logs) {
+    const normalized = `${logs}`.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    return normalized
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => (hasTimePrefix(line) ? line : `[${formatConsoleTime(new Date())}] ${line}`));
+}
+
+function hasTimePrefix(line) {
+    return /^\[\d{2}:\d{2}:\d{2}\]\s/.test(line);
+}
+
+function formatConsoleTime(value) {
+    const hours = `${value.getHours()}`.padStart(2, "0");
+    const minutes = `${value.getMinutes()}`.padStart(2, "0");
+    const seconds = `${value.getSeconds()}`.padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
 }
