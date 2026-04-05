@@ -1,3 +1,5 @@
+// Package logstream 管理实时日志会话和广播订阅。
+
 package logstream
 
 import (
@@ -16,12 +18,14 @@ var (
 	sessionIDRegexp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 )
 
+// Event 表示实时日志流中的一条事件。
 type Event struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp,omitempty"`
 	Message   string `json:"message,omitempty"`
 }
 
+// Session 表示一个可发布日志并在结束时主动关闭的实时日志会话。
 type Session struct {
 	hub *hub
 	id  string
@@ -49,6 +53,7 @@ type subscriber struct {
 	done bool
 }
 
+// NormalizeSessionID 会规范化会话ID，并在输入为空或不受支持时返回稳定的默认值。
 func NormalizeSessionID(raw string) string {
 	sessionID := strings.TrimSpace(raw)
 	if !sessionIDRegexp.MatchString(sessionID) {
@@ -57,6 +62,7 @@ func NormalizeSessionID(raw string) string {
 	return sessionID
 }
 
+// Open 返回指定会话 ID 对应的实时日志会话；会话 ID 无效时返回 nil。
 func Open(raw string) *Session {
 	sessionID := NormalizeSessionID(raw)
 	if sessionID == "" {
@@ -66,6 +72,7 @@ func Open(raw string) *Session {
 	return &Session{hub: defaultHub, id: sessionID}
 }
 
+// Publish 会广播日志会话，把日志或事件发送给当前订阅方。
 func (s *Session) Publish(message string) {
 	if s == nil {
 		return
@@ -73,6 +80,7 @@ func (s *Session) Publish(message string) {
 	s.hub.publish(s.id, strings.TrimRight(message, "\r\n"))
 }
 
+// Publishf 按格式化字符串写入一条日志消息。
 func (s *Session) Publishf(format string, args ...any) {
 	if s == nil {
 		return
@@ -80,6 +88,7 @@ func (s *Session) Publishf(format string, args ...any) {
 	s.Publish(fmt.Sprintf(format, args...))
 }
 
+// Close 会关闭日志会话，并释放当前流程持有的资源。
 func (s *Session) Close() {
 	if s == nil {
 		return
@@ -87,7 +96,8 @@ func (s *Session) Close() {
 	s.hub.close(s.id)
 }
 
-func ServeWS(w http.ResponseWriter, r *http.Request, sessionID string) error {
+// ServeWebSocket 将当前 HTTP 请求升级为日志 WebSocket 连接，并订阅指定会话。
+func ServeWebSocket(w http.ResponseWriter, r *http.Request, sessionID string) error {
 	conn, err := upgradeWebSocket(w, r)
 	if err != nil {
 		return err
@@ -105,10 +115,12 @@ func ServeWS(w http.ResponseWriter, r *http.Request, sessionID string) error {
 	return nil
 }
 
+// newHub 创建一个空的日志会话中心。
 func newHub() *hub {
 	return &hub{sessions: make(map[string]*sessionState)}
 }
 
+// ensureSession 获取已存在的会话状态；不存在时创建一个新的。
 func (h *hub) ensureSession(sessionID string) *sessionState {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -128,6 +140,7 @@ func (h *hub) ensureSession(sessionID string) *sessionState {
 	return state
 }
 
+// publish 会广播日志会话，把日志或事件发送给当前订阅方。
 func (h *hub) publish(sessionID, message string) {
 	state := h.ensureSession(sessionID)
 	event := Event{
@@ -150,6 +163,7 @@ func (h *hub) publish(sessionID, message string) {
 	}
 }
 
+// close 会关闭日志会话，并释放当前流程持有的资源。
 func (h *hub) close(sessionID string) {
 	h.mu.Lock()
 	state, ok := h.sessions[sessionID]
@@ -182,6 +196,7 @@ func (h *hub) close(sessionID string) {
 	state.scheduleCleanup()
 }
 
+// addSubscriber 将订阅者附加到会话，并返回当前历史记录以及会话是否已关闭。
 func (h *hub) addSubscriber(sessionID string, sub *subscriber) ([]Event, bool) {
 	state := h.ensureSession(sessionID)
 
@@ -197,6 +212,7 @@ func (h *hub) addSubscriber(sessionID string, sub *subscriber) ([]Event, bool) {
 	return history, false
 }
 
+// removeSubscriber 从会话中移除一个订阅者；必要时触发延迟清理。
 func (h *hub) removeSubscriber(sessionID string, sub *subscriber) {
 	h.mu.Lock()
 	state, ok := h.sessions[sessionID]
@@ -216,6 +232,7 @@ func (h *hub) removeSubscriber(sessionID string, sub *subscriber) {
 	}
 }
 
+// snapshotSubscribersLocked 复制当前订阅者列表；调用方必须先持有 sessionState 的锁。
 func (s *sessionState) snapshotSubscribersLocked() []*subscriber {
 	subscribers := make([]*subscriber, 0, len(s.subscribers))
 	for sub := range s.subscribers {
@@ -224,6 +241,7 @@ func (s *sessionState) snapshotSubscribersLocked() []*subscriber {
 	return subscribers
 }
 
+// scheduleCleanup 在会话关闭后安排一次延迟清理，避免断线重连立即丢失历史记录。
 func (s *sessionState) scheduleCleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -240,6 +258,7 @@ func (s *sessionState) scheduleCleanup() {
 	})
 }
 
+// stopCleanup 取消已经安排的延迟清理任务。
 func (s *sessionState) stopCleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -249,6 +268,7 @@ func (s *sessionState) stopCleanup() {
 	}
 }
 
+// enqueue 会把日志会话加入发送队列，等待后续异步写出。
 func (s *subscriber) enqueue(event Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -264,6 +284,7 @@ func (s *subscriber) enqueue(event Event) {
 	}
 }
 
+// closeSend 关闭订阅者的发送通道，并确保该操作只执行一次。
 func (s *subscriber) closeSend() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -275,6 +296,7 @@ func (s *subscriber) closeSend() {
 	s.done = true
 }
 
+// writeLoop 先回放历史事件，再持续把新事件写入 WebSocket 连接。
 func (s *subscriber) writeLoop(history []Event, closeAfterHistory bool) {
 	defer s.conn.Close()
 
@@ -298,6 +320,7 @@ func (s *subscriber) writeLoop(history []Event, closeAfterHistory bool) {
 	_ = s.conn.WriteClose()
 }
 
+// readLoop 持续读取客户端帧，直到连接断开后将订阅者从会话中移除。
 func (s *subscriber) readLoop(sessionID string) {
 	defer defaultHub.removeSubscriber(sessionID, s)
 	defer s.closeSend()
@@ -306,6 +329,7 @@ func (s *subscriber) readLoop(sessionID string) {
 	_ = s.conn.ReadLoop()
 }
 
+// writeEvent 将单条事件编码成 JSON 并写入当前 WebSocket 连接。
 func (s *subscriber) writeEvent(event Event) error {
 	return s.conn.WriteJSON(event)
 }
