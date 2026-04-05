@@ -1,3 +1,5 @@
+// Package screenshot 提供截图文件压缩能力。
+
 package screenshot
 
 import (
@@ -8,6 +10,7 @@ import (
 	"path/filepath"
 )
 
+// ZipFiles 把给定文件列表打包成一个内存中的 ZIP 压缩包。
 func ZipFiles(paths []string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)

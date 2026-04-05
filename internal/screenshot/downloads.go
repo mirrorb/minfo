@@ -1,3 +1,5 @@
+// Package screenshot 管理已准备下载文件的缓存与清理。
+
 package screenshot
 
 import (
@@ -25,6 +27,7 @@ var preparedDownloads = struct {
 	items: map[string]preparedDownload{},
 }
 
+// SavePreparedDownload 将生成好的 ZIP 数据写入临时文件，并返回下载令牌。
 func SavePreparedDownload(data []byte) (string, error) {
 	prunePreparedDownloads(time.Now())
 
@@ -59,6 +62,7 @@ func SavePreparedDownload(data []byte) (string, error) {
 	return token, nil
 }
 
+// GetPreparedDownload 根据令牌返回仍在有效期内的临时下载文件路径。
 func GetPreparedDownload(token string) (string, error) {
 	now := time.Now()
 	prunePreparedDownloads(now)
@@ -74,6 +78,7 @@ func GetPreparedDownload(token string) (string, error) {
 	return item.path, nil
 }
 
+// prunePreparedDownloads 删除过期缓存及其对应的临时文件，避免缓存持续增长。
 func prunePreparedDownloads(now time.Time) {
 	preparedDownloads.mu.Lock()
 	defer preparedDownloads.mu.Unlock()
@@ -87,6 +92,7 @@ func prunePreparedDownloads(now time.Time) {
 	}
 }
 
+// buildPreparedDownloadToken 生成一个随机的下载令牌。
 func buildPreparedDownloadToken() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {

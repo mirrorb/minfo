@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +8,10 @@
 
 #define STREAM_TYPE_PRESENTATION_GRAPHICS 0x90
 #define STREAM_TYPE_INTERACTIVE_GRAPHICS 0x91
+#define M2TS_PACKET_SIZE 192
+#define TS_PACKET_SIZE 188
+#define M2TS_TS_SYNC_OFFSET 4
+#define M2TS_READ_CHUNK (M2TS_PACKET_SIZE * 4096)
 
 typedef struct pg_stream_info {
     uint16_t pid;
@@ -14,12 +19,15 @@ typedef struct pg_stream_info {
     uint8_t coding_type;
     uint8_t char_code;
     uint8_t subpath_id;
+    uint64_t payload_bytes;
+    uint64_t bitrate;
 } PG_STREAM_INFO;
 
 typedef struct probe_result {
     char source[32];
     uint32_t playlist;
     uint32_t clip_ref;
+    uint32_t clip_duration_ticks;
     char clip_id[6];
     size_t pg_stream_count;
     PG_STREAM_INFO *pg_streams;
@@ -164,6 +172,30 @@ static void probe_result_set_clip(PROBE_RESULT *result, const char *clip_id, uin
     result->clip_ref = clip_ref;
 }
 
+static void probe_result_set_clip_duration(PROBE_RESULT *result, uint32_t clip_duration_ticks)
+{
+    if (!result) {
+        return;
+    }
+    result->clip_duration_ticks = clip_duration_ticks;
+}
+
+static PG_STREAM_INFO *probe_result_find_pg_stream(PROBE_RESULT *result, uint16_t pid)
+{
+    size_t i;
+
+    if (!result || pid == 0) {
+        return NULL;
+    }
+
+    for (i = 0; i < result->pg_stream_count; i++) {
+        if (result->pg_streams[i].pid == pid) {
+            return &result->pg_streams[i];
+        }
+    }
+    return NULL;
+}
+
 static int probe_result_upsert_pg_stream(PROBE_RESULT *result,
                                          uint16_t pid,
                                          const char *lang,
@@ -225,6 +257,27 @@ static int probe_result_upsert_pg_stream(PROBE_RESULT *result,
     }
     result->pg_stream_count++;
     return 1;
+}
+
+static void probe_result_finalize_pg_bitrates(PROBE_RESULT *result)
+{
+    size_t i;
+
+    if (!result || result->clip_duration_ticks == 0) {
+        return;
+    }
+
+    for (i = 0; i < result->pg_stream_count; i++) {
+        PG_STREAM_INFO *stream = &result->pg_streams[i];
+        if (stream->payload_bytes == 0) {
+            stream->bitrate = 0;
+            continue;
+        }
+        stream->bitrate =
+            (stream->payload_bytes * 8u * (uint64_t)45000u +
+             (uint64_t)result->clip_duration_ticks / 2u) /
+            (uint64_t)result->clip_duration_ticks;
+    }
 }
 
 static char *build_disc_file_path(const char *disc_path,
@@ -477,6 +530,9 @@ static int parse_mpls_streams(const char *disc_path,
         uint8_t stream_count_video;
         uint8_t stream_count_audio;
         uint8_t stream_count_pg;
+        uint32_t in_time;
+        uint32_t out_time;
+        uint32_t clip_duration_ticks;
         uint16_t count_index;
         int clip_match;
 
@@ -515,8 +571,17 @@ static int parse_mpls_streams(const char *disc_path,
             free(data);
             return 0;
         }
+        in_time = read_be32(data, pos);
+        if ((in_time & 0x80000000u) != 0) {
+            in_time &= 0x7fffffffu;
+        }
         pos += 4;
+        out_time = read_be32(data, pos);
+        if ((out_time & 0x80000000u) != 0) {
+            out_time &= 0x7fffffffu;
+        }
         pos += 4;
+        clip_duration_ticks = out_time > in_time ? out_time - in_time : 0;
 
         if (pos + 12 > item_end) {
             free(data);
@@ -564,6 +629,7 @@ static int parse_mpls_streams(const char *disc_path,
 
             found_any_clip = 1;
             probe_result_set_clip(result, item_name, item_index);
+            probe_result_set_clip_duration(result, clip_duration_ticks);
 
             for (count_index = 0; count_index < stream_count_video; count_index++) {
                 if (!parse_playlist_stream_descriptor(data, item_end, &pos, result)) {
@@ -701,6 +767,101 @@ static int parse_clpi_streams(const char *disc_path,
     return found_any;
 }
 
+static size_t parse_m2ts_packet_payload_size(const uint8_t *packet, uint16_t *out_pid)
+{
+    const uint8_t *ts;
+    uint8_t adaptation_control;
+    size_t payload_pos = 4;
+
+    if (out_pid) {
+        *out_pid = 0;
+    }
+    if (!packet || packet[M2TS_TS_SYNC_OFFSET] != 0x47) {
+        return 0;
+    }
+
+    ts = packet + M2TS_TS_SYNC_OFFSET;
+    if (out_pid) {
+        *out_pid = (uint16_t)(((uint16_t)(ts[1] & 0x1f) << 8) | ts[2]);
+    }
+
+    adaptation_control = (uint8_t)((ts[3] >> 4) & 0x03);
+    if (adaptation_control == 0 || adaptation_control == 2) {
+        return 0;
+    }
+    if (adaptation_control == 3) {
+        payload_pos += 1u + (size_t)ts[payload_pos];
+        if (payload_pos > TS_PACKET_SIZE) {
+            return 0;
+        }
+    }
+    if (payload_pos >= TS_PACKET_SIZE) {
+        return 0;
+    }
+    return TS_PACKET_SIZE - payload_pos;
+}
+
+static int probe_result_scan_clip_pg_bitrates(const char *disc_path, PROBE_RESULT *result)
+{
+    char *path = NULL;
+    uint8_t *buffer = NULL;
+    FILE *file = NULL;
+    size_t carry = 0;
+    int success = 0;
+
+    if (!disc_path || !result || result->clip_id[0] == '\0' || result->pg_stream_count == 0) {
+        return 0;
+    }
+
+    path = build_disc_file_path(disc_path, "STREAM", result->clip_id, ".m2ts");
+    if (!path) {
+        return 0;
+    }
+
+    file = fopen(path, "rb");
+    free(path);
+    if (!file) {
+        return 0;
+    }
+
+    buffer = (uint8_t *)malloc(M2TS_READ_CHUNK + M2TS_PACKET_SIZE);
+    if (!buffer) {
+        fclose(file);
+        return 0;
+    }
+
+    setvbuf(file, NULL, _IOFBF, M2TS_READ_CHUNK);
+    while (!feof(file)) {
+        size_t read_size = fread(buffer + carry, 1, M2TS_READ_CHUNK, file);
+        size_t total = carry + read_size;
+        size_t offset = 0;
+
+        while (offset + M2TS_PACKET_SIZE <= total) {
+            uint16_t pid = 0;
+            size_t payload_size = parse_m2ts_packet_payload_size(buffer + offset, &pid);
+            PG_STREAM_INFO *stream = probe_result_find_pg_stream(result, pid);
+            if (stream && payload_size > 0) {
+                stream->payload_bytes += (uint64_t)payload_size;
+            }
+            offset += M2TS_PACKET_SIZE;
+        }
+
+        carry = total - offset;
+        if (carry > 0) {
+            memmove(buffer, buffer + offset, carry);
+        }
+    }
+
+    if (ferror(file) == 0) {
+        probe_result_finalize_pg_bitrates(result);
+        success = 1;
+    }
+
+    free(buffer);
+    fclose(file);
+    return success;
+}
+
 static void print_probe_result_json(const char *disc_path, const PROBE_RESULT *result)
 {
     size_t i;
@@ -726,6 +887,7 @@ static void print_probe_result_json(const char *disc_path, const PROBE_RESULT *r
             printf(",\"coding_type\":%u", stream->coding_type);
             printf(",\"char_code\":%u", stream->char_code);
             printf(",\"subpath_id\":%u", stream->subpath_id);
+            printf(",\"bitrate\":%" PRIu64, stream->bitrate);
             printf("}");
         }
     }
@@ -800,6 +962,7 @@ int main(int argc, char **argv)
         return 5;
     }
 
+    (void)probe_result_scan_clip_pg_bitrates(disc_path, &result);
     print_probe_result_json(disc_path, &result);
     probe_result_free(&result);
     return 0;

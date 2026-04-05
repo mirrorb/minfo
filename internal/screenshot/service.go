@@ -1,3 +1,5 @@
+// Package screenshot 对外暴露截图、上传和时间点计算服务。
+
 package screenshot
 
 import (
@@ -15,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"minfo/internal/media"
 	"minfo/internal/system"
 )
 
@@ -24,10 +25,10 @@ const (
 	minScreenshotCount     = 1
 	maxScreenshotCount     = 10
 
-	nativeDVDPacketDiscontinuityGap = 30.0
+	dvdPacketDiscontinuityGap = 30.0
 )
 
-var nativeDVDTitleVOBPattern = regexp.MustCompile(`(?i)^VTS_(\d{2})_([1-9]\d*)\.VOB$`)
+var dvdTitleVOBPattern = regexp.MustCompile(`(?i)^VTS_(\d{2})_([1-9]\d*)\.VOB$`)
 
 const (
 	ModeZip   = "zip"
@@ -40,18 +41,22 @@ const (
 	SubtitleModeOff  = "off"
 )
 
-type ScriptResult struct {
+// ScreenshotsResult 表示一次截图流程返回的文件列表和日志。
+type ScreenshotsResult struct {
 	Files []string
 	Logs  string
 }
 
+// UploadResult 表示一次截图上传流程返回的直链文本和日志。
 type UploadResult struct {
 	Output string
 	Logs   string
 }
 
+// LogHandler 处理截图流程产生的单行实时日志。
 type LogHandler func(line string)
 
+// NormalizeMode 规范化截图接口的 mode；未知值会回落为 zip。
 func NormalizeMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case ModeLinks:
@@ -61,6 +66,7 @@ func NormalizeMode(raw string) string {
 	}
 }
 
+// NormalizeVariant 规范化截图输出格式；未知值会回落为 png。
 func NormalizeVariant(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case VariantJPG:
@@ -70,6 +76,7 @@ func NormalizeVariant(raw string) string {
 	}
 }
 
+// NormalizeSubtitleMode 规范化字幕模式；off 和 none 类输入会关闭字幕，其余值使用自动模式。
 func NormalizeSubtitleMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case SubtitleModeOff, "none", "nosub", "false", "0":
@@ -79,6 +86,7 @@ func NormalizeSubtitleMode(raw string) string {
 	}
 }
 
+// NormalizeCount 规范化截图数量，并限制在允许范围内。
 func NormalizeCount(raw string) int {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -99,22 +107,26 @@ func NormalizeCount(raw string) int {
 	}
 }
 
-func RunScript(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) ([]string, error) {
-	result, err := RunScriptWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
+// RunScreenshots 执行截图流程并仅返回生成的文件列表。
+func RunScreenshots(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) ([]string, error) {
+	result, err := RunScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
 	if err != nil {
 		return nil, err
 	}
 	return result.Files, nil
 }
 
-func RunScriptWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (ScriptResult, error) {
-	return RunScriptWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, nil)
+// RunScreenshotsWithLogs 执行截图流程并返回文件列表与完整日志。
+func RunScreenshotsWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (ScreenshotsResult, error) {
+	return RunScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, nil)
 }
 
-func RunScriptWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (ScriptResult, error) {
-	return runNativeScreenshotsWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
+// RunScreenshotsWithLiveLogs 会执行截图流程，并把实时日志通过回调逐行暴露给调用方。
+func RunScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (ScreenshotsResult, error) {
+	return runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 }
 
+// RunUpload 执行截图加上传流程并仅返回直链输出。
 func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (string, error) {
 	result, err := RunUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count)
 	if err != nil {
@@ -123,26 +135,17 @@ func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode 
 	return result.Output, nil
 }
 
+// RunUploadWithLogs 执行截图加上传流程并返回直链输出与完整日志。
 func RunUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int) (UploadResult, error) {
 	return RunUploadWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, nil)
 }
 
+// RunUploadWithLiveLogs 会执行截图加上传流程，并把实时日志通过回调逐行暴露给调用方。
 func RunUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (UploadResult, error) {
-	return runNativeUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
+	return runPixhostUploadWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 }
 
-func randomScreenshotTimestamps(ctx context.Context, inputPath string, count int) ([]string, error) {
-	count = normalizeCountValue(count)
-
-	sourcePath, cleanup, err := media.ResolveScreenshotSource(ctx, inputPath)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	return randomScreenshotTimestampsForSource(ctx, sourcePath, count)
-}
-
+// randomScreenshotTimestampsForSource 针对已经解析好的媒体源生成随机截图时间点。
 func randomScreenshotTimestampsForSource(ctx context.Context, sourcePath string, count int) ([]string, error) {
 	count = normalizeCountValue(count)
 
@@ -159,13 +162,14 @@ func randomScreenshotTimestampsForSource(ctx context.Context, sourcePath string,
 	seconds := buildRandomTimestampSeconds(duration, count)
 	timestamps := make([]string, 0, len(seconds))
 	for _, second := range seconds {
-		timestamps = append(timestamps, formatScriptTimestamp(second))
+		timestamps = append(timestamps, formatTimestamp(second))
 	}
 	return timestamps, nil
 }
 
+// probeMediaDuration 优先通过 ffprobe 探测时长；必要时回退到 DVD 包时长或 MediaInfo。
 func probeMediaDuration(ctx context.Context, ffprobe, path string) (float64, error) {
-	if nativeIsDVDTitleVOB(path) {
+	if isDVDTitleVOB(path) {
 		if duration, err := probeDVDTitleVOBPacketDuration(ctx, ffprobe, path); err == nil {
 			return duration, nil
 		}
@@ -198,10 +202,12 @@ func probeMediaDuration(ctx context.Context, ffprobe, path string) (float64, err
 	return 0, fmt.Errorf("ffprobe returned unusable duration: format probe (%v); stream probe (%v)", parseErr, streamErr)
 }
 
-func nativeIsDVDTitleVOB(path string) bool {
-	return nativeDVDTitleVOBPattern.MatchString(filepath.Base(strings.TrimSpace(path)))
+// isDVDTitleVOB 会判断DVD标题VOB是否满足当前条件。
+func isDVDTitleVOB(path string) bool {
+	return dvdTitleVOBPattern.MatchString(filepath.Base(strings.TrimSpace(path)))
 }
 
+// runFFprobeDuration 运行一次 ffprobe 时长查询，并按指定 entries 返回原始输出。
 func runFFprobeDuration(ctx context.Context, ffprobe, path, entries string) (string, string, error) {
 	return system.RunCommand(ctx, ffprobe,
 		"-v", "error",
@@ -211,6 +217,7 @@ func runFFprobeDuration(ctx context.Context, ffprobe, path, entries string) (str
 	)
 }
 
+// probeDVDTitleVOBPacketDuration 通过视频包时间戳累加估算 DVD 标题 VOB 的实际时长。
 func probeDVDTitleVOBPacketDuration(ctx context.Context, ffprobe, path string) (float64, error) {
 	startOffset, err := probeVideoStartOffset(ctx, ffprobe, path)
 	if err != nil {
@@ -232,18 +239,19 @@ func probeDVDTitleVOBPacketDuration(ctx context.Context, ffprobe, path string) (
 		return 0, errors.New("ffprobe returned empty packet payload")
 	}
 
-	var payload nativeFFprobePacketsPayload
+	var payload ffprobePacketsPayload
 	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
 		return 0, err
 	}
 
-	duration, ok := nativeAccumulateDVDPacketDuration(payload.Packets, startOffset, nativeDVDPacketDiscontinuityGap)
+	duration, ok := accumulateDVDPacketDuration(payload.Packets, startOffset, dvdPacketDiscontinuityGap)
 	if !ok || duration <= 0 {
 		return 0, errors.New("ffprobe returned unusable packet duration")
 	}
 	return duration, nil
 }
 
+// probeVideoStartOffset 读取视频流或封装层记录的 start_time。
 func probeVideoStartOffset(ctx context.Context, ffprobe, path string) (float64, error) {
 	stdout, stderr, err := system.RunCommand(ctx, ffprobe,
 		"-v", "error",
@@ -253,7 +261,7 @@ func probeVideoStartOffset(ctx context.Context, ffprobe, path string) (float64, 
 		path,
 	)
 	if err == nil {
-		if value, ok := nativeFirstFloatLine(stdout); ok {
+		if value, ok := firstFloatLine(stdout); ok {
 			return value, nil
 		}
 	}
@@ -265,7 +273,7 @@ func probeVideoStartOffset(ctx context.Context, ffprobe, path string) (float64, 
 		path,
 	)
 	if err == nil {
-		if value, ok := nativeFirstFloatLine(stdout); ok {
+		if value, ok := firstFloatLine(stdout); ok {
 			return value, nil
 		}
 	}
@@ -275,6 +283,7 @@ func probeVideoStartOffset(ctx context.Context, ffprobe, path string) (float64, 
 	return 0, errors.New("ffprobe returned empty start_time")
 }
 
+// probeMediaInfoDuration 使用 mediainfo 的 General Duration 结果补充时长探测。
 func probeMediaInfoDuration(ctx context.Context, path string) (float64, error) {
 	mediainfo, err := system.ResolveBin("MEDIAINFO_BIN", "mediainfo")
 	if err != nil {
@@ -288,6 +297,7 @@ func probeMediaInfoDuration(ctx context.Context, path string) (float64, error) {
 	return parseMediaInfoDurationOutput(stdout)
 }
 
+// parseMediaInfoDurationOutput 从 mediainfo 输出中解析第一个有效的毫秒时长。
 func parseMediaInfoDurationOutput(output string) (float64, error) {
 	values := strings.FieldsFunc(output, func(r rune) bool {
 		return r == '\n' || r == '\r' || r == ';'
@@ -315,6 +325,7 @@ func parseMediaInfoDurationOutput(output string) (float64, error) {
 	return 0, fmt.Errorf("mediainfo returned invalid duration values: %s", strings.Join(invalid, ", "))
 }
 
+// parseDurationOutput 从 ffprobe 输出中挑选最大的有效时长值。
 func parseDurationOutput(output string) (float64, error) {
 	lines := strings.Split(output, "\n")
 	best := 0.0
@@ -348,9 +359,10 @@ func parseDurationOutput(output string) (float64, error) {
 	return 0, fmt.Errorf("ffprobe returned invalid duration values: %s", strings.Join(invalid, ", "))
 }
 
-func nativeAccumulateDVDPacketDuration(packets []nativeFFprobePacket, startOffset, discontinuityGap float64) (float64, bool) {
+// accumulateDVDPacketDuration 根据包时间戳累计连续区间时长，并忽略明显跳变。
+func accumulateDVDPacketDuration(packets []ffprobePacket, startOffset, discontinuityGap float64) (float64, bool) {
 	if discontinuityGap <= 0 {
-		discontinuityGap = nativeDVDPacketDiscontinuityGap
+		discontinuityGap = dvdPacketDiscontinuityGap
 	}
 
 	clusterStart := 0.0
@@ -359,11 +371,11 @@ func nativeAccumulateDVDPacketDuration(packets []nativeFFprobePacket, startOffse
 	started := false
 
 	for _, packet := range packets {
-		pts, ok := nativeParseFloatString(packet.PTSTime)
+		pts, ok := parseFloatString(packet.PTSTime)
 		if !ok {
 			continue
 		}
-		durationValue, ok := nativeParseFloatString(packet.DurationTime)
+		durationValue, ok := parseFloatString(packet.DurationTime)
 		if !ok || durationValue < 0 {
 			durationValue = 0
 		}
@@ -410,6 +422,7 @@ func nativeAccumulateDVDPacketDuration(packets []nativeFFprobePacket, startOffse
 	return total, true
 }
 
+// buildRandomTimestampSeconds 在媒体时长范围内按分段随机的方式生成截图秒数。
 func buildRandomTimestampSeconds(duration float64, count int) []int {
 	count = normalizeCountValue(count)
 
@@ -471,6 +484,7 @@ func buildRandomTimestampSeconds(duration float64, count int) []int {
 	return values
 }
 
+// normalizeCountValue 规范化内部使用的截图数量。
 func normalizeCountValue(count int) int {
 	switch {
 	case count == 0:
@@ -484,16 +498,7 @@ func normalizeCountValue(count int) int {
 	}
 }
 
-func formatScriptTimestamp(totalSeconds int) string {
-	if totalSeconds < 0 {
-		totalSeconds = 0
-	}
-	hours := totalSeconds / 3600
-	minutes := (totalSeconds % 3600) / 60
-	seconds := totalSeconds % 60
-	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
-}
-
+// listScreenshotFiles 会列出截图文件，并按当前规则返回排序后的结果列表。
 func listScreenshotFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -518,6 +523,7 @@ func listScreenshotFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
+// extractDirectLinks 从文本中筛出唯一的 HTTP 或 HTTPS 直链。
 func extractDirectLinks(output string) []string {
 	lines := strings.Split(output, "\n")
 	links := make([]string, 0, len(lines))
@@ -542,6 +548,7 @@ func extractDirectLinks(output string) []string {
 	return links
 }
 
+// filterNonEmptyStrings 过滤空字符串并保留原顺序。
 func filterNonEmptyStrings(values ...string) []string {
 	filtered := make([]string, 0, len(values))
 	for _, value := range values {

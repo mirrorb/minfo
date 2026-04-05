@@ -1,3 +1,5 @@
+// Package screenshot 提供 DVD MediaInfo 字幕元数据解析逻辑。
+
 package screenshot
 
 import (
@@ -14,7 +16,7 @@ import (
 	"minfo/internal/system"
 )
 
-type nativeDVDMediaInfoTrack struct {
+type dvdMediaInfoTrack struct {
 	StreamID int
 	ID       string
 	Format   string
@@ -23,41 +25,42 @@ type nativeDVDMediaInfoTrack struct {
 	Source   string
 }
 
-type nativeDVDMediaInfoResult struct {
+type dvdMediaInfoResult struct {
 	Duration             float64
-	Tracks               []nativeDVDMediaInfoTrack
+	Tracks               []dvdMediaInfoTrack
 	ProbePath            string
 	SelectedVOBPath      string
 	LanguageFallbackPath string
 }
 
-type nativeMediaInfoPayload struct {
+type mediaInfoPayload struct {
 	Media struct {
 		Track []map[string]interface{} `json:"track"`
 	} `json:"media"`
 }
 
-var nativeMediaInfoHexIDPattern = regexp.MustCompile(`(?i)\(0x([0-9a-f]+)\)`)
+var mediaInfoHexIDPattern = regexp.MustCompile(`(?i)\(0x([0-9a-f]+)\)`)
 
-func probeDVDMediaInfo(ctx context.Context, mediainfoBin, path, probePath string) (nativeDVDMediaInfoResult, error) {
+// probeDVDMediaInfo 使用 mediainfo 提取 DVD 字幕元数据；必要时会从 BUP 结果补齐缺失语言。
+func probeDVDMediaInfo(ctx context.Context, mediainfoBin, path, probePath string) (dvdMediaInfoResult, error) {
 	if strings.TrimSpace(mediainfoBin) == "" {
-		return nativeDVDMediaInfoResult{}, fmt.Errorf("mediainfo not available")
+		return dvdMediaInfoResult{}, fmt.Errorf("mediainfo not available")
 	}
 
-	selectedVOBPath := nativeResolveDVDMediaInfoVOBPath(path, probePath)
-	primaryPath := nativeResolveDVDMediaInfoProbePath(path, probePath)
-	result, err := nativeProbeDVDMediaInfoOnce(ctx, mediainfoBin, primaryPath)
+	selectedVOBPath := resolveDVDMediaInfoVOBPath(path, probePath)
+	primaryPath := resolveDVDMediaInfoProbePath(path, probePath)
+	result, err := probeDVDMediaInfoOnce(ctx, mediainfoBin, primaryPath)
 	if err != nil {
-		return nativeDVDMediaInfoResult{}, err
+		return dvdMediaInfoResult{}, err
 	}
 	result.ProbePath = primaryPath
 	result.SelectedVOBPath = selectedVOBPath
 
-	if nativeDVDMediaInfoNeedsLanguageFallback(result) {
-		if bupPath, ok := nativeDVDMediaInfoBUPPath(primaryPath); ok {
-			fallback, fallbackErr := nativeProbeDVDMediaInfoOnce(ctx, mediainfoBin, bupPath)
+	if dvdMediaInfoNeedsLanguageFallback(result) {
+		if bupPath, ok := dvdMediaInfoBUPPath(primaryPath); ok {
+			fallback, fallbackErr := probeDVDMediaInfoOnce(ctx, mediainfoBin, bupPath)
 			if fallbackErr == nil {
-				merged, used := nativeMergeDVDMediaInfoLanguageFallback(result, fallback)
+				merged, used := mergeDVDMediaInfoLanguageFallback(result, fallback)
 				if used {
 					merged.ProbePath = result.ProbePath
 					merged.SelectedVOBPath = result.SelectedVOBPath
@@ -70,41 +73,42 @@ func probeDVDMediaInfo(ctx context.Context, mediainfoBin, path, probePath string
 	return result, nil
 }
 
-func nativeProbeDVDMediaInfoOnce(ctx context.Context, mediainfoBin, path string) (nativeDVDMediaInfoResult, error) {
+// probeDVDMediaInfoOnce 运行一次 mediainfo JSON 探测，并解析出字幕轨和时长信息。
+func probeDVDMediaInfoOnce(ctx context.Context, mediainfoBin, path string) (dvdMediaInfoResult, error) {
 	stdout, stderr, err := system.RunCommand(ctx, mediainfoBin, "--Output=JSON", path)
 	if err != nil {
-		return nativeDVDMediaInfoResult{}, fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
+		return dvdMediaInfoResult{}, fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
 	}
 	if strings.TrimSpace(stdout) == "" {
-		return nativeDVDMediaInfoResult{}, fmt.Errorf("mediainfo returned empty output")
+		return dvdMediaInfoResult{}, fmt.Errorf("mediainfo returned empty output")
 	}
 
-	payloads, err := nativeDecodeMediaInfoPayloads([]byte(stdout))
+	payloads, err := decodeMediaInfoPayloads([]byte(stdout))
 	if err != nil {
-		return nativeDVDMediaInfoResult{}, err
+		return dvdMediaInfoResult{}, err
 	}
 
-	result := nativeDVDMediaInfoResult{
-		Tracks: make([]nativeDVDMediaInfoTrack, 0, 8),
+	result := dvdMediaInfoResult{
+		Tracks: make([]dvdMediaInfoTrack, 0, 8),
 	}
 
 	for _, payload := range payloads {
 		for _, track := range payload.Media.Track {
-			trackType := strings.TrimSpace(nativeMediaInfoTrackString(track, "@type"))
+			trackType := strings.TrimSpace(mediaInfoTrackString(track, "@type"))
 			switch strings.ToLower(trackType) {
 			case "general":
-				if value, ok := nativeParseMediaInfoTrackDuration(nativeMediaInfoTrackString(track, "Duration")); ok && value > 0 && value > result.Duration {
+				if value, ok := parseMediaInfoTrackDuration(mediaInfoTrackString(track, "Duration")); ok && value > 0 && value > result.Duration {
 					result.Duration = value
 				}
 			case "text":
-				streamID, _ := nativeParseMediaInfoStreamID(nativeMediaInfoTrackString(track, "ID"))
-				result.Tracks = append(result.Tracks, nativeDVDMediaInfoTrack{
+				streamID, _ := parseMediaInfoStreamID(mediaInfoTrackString(track, "ID"))
+				result.Tracks = append(result.Tracks, dvdMediaInfoTrack{
 					StreamID: streamID,
-					ID:       nativeMediaInfoTrackString(track, "ID"),
-					Format:   nativeMediaInfoTrackString(track, "Format", "Format/String"),
-					Language: nativeMediaInfoTrackString(track, "Language", "Language/String"),
-					Title:    nativeMediaInfoTrackString(track, "Title", "Title/String"),
-					Source:   nativeMediaInfoTrackString(track, "Source"),
+					ID:       mediaInfoTrackString(track, "ID"),
+					Format:   mediaInfoTrackString(track, "Format", "Format/String"),
+					Language: mediaInfoTrackString(track, "Language", "Language/String"),
+					Title:    mediaInfoTrackString(track, "Title", "Title/String"),
+					Source:   mediaInfoTrackString(track, "Source"),
 				})
 			}
 		}
@@ -119,25 +123,28 @@ func nativeProbeDVDMediaInfoOnce(ctx context.Context, mediainfoBin, path string)
 	return result, nil
 }
 
-func nativeResolveDVDMediaInfoProbePath(path, probePath string) string {
+// resolveDVDMediaInfoProbePath 选择实际交给 mediainfo 的探测路径；优先使用能映射到 IFO 的路径。
+func resolveDVDMediaInfoProbePath(path, probePath string) string {
 	for _, candidate := range []string{probePath, path} {
-		if resolved, ok := nativeDVDMediaInfoIFOPath(candidate); ok {
+		if resolved, ok := dvdMediaInfoIFOPath(candidate); ok {
 			return resolved
 		}
 	}
 	return strings.TrimSpace(path)
 }
 
-func nativeResolveDVDMediaInfoVOBPath(path, probePath string) string {
+// resolveDVDMediaInfoVOBPath 返回与当前探测路径对应的标题 VOB 路径。
+func resolveDVDMediaInfoVOBPath(path, probePath string) string {
 	for _, candidate := range []string{probePath, path} {
-		if resolved, ok := nativeDVDMediaInfoTitleVOBPath(candidate); ok {
+		if resolved, ok := dvdMediaInfoTitleVOBPath(candidate); ok {
 			return resolved
 		}
 	}
 	return ""
 }
 
-func nativeDVDMediaInfoIFOPath(path string) (string, bool) {
+// dvdMediaInfoIFOPath 把 DVD 相关路径归一化为对应的 IFO 文件路径。
+func dvdMediaInfoIFOPath(path string) (string, bool) {
 	cleaned := strings.TrimSpace(path)
 	if cleaned == "" {
 		return "", false
@@ -146,18 +153,18 @@ func nativeDVDMediaInfoIFOPath(path string) (string, bool) {
 	upperBase := strings.ToUpper(filepath.Base(cleaned))
 	switch filepath.Ext(upperBase) {
 	case ".IFO":
-		if nativeFileExists(cleaned) {
+		if fileExists(cleaned) {
 			return cleaned, true
 		}
 	case ".BUP":
 		ifoPath := strings.TrimSuffix(cleaned, filepath.Ext(cleaned)) + ".IFO"
-		if nativeFileExists(ifoPath) {
+		if fileExists(ifoPath) {
 			return ifoPath, true
 		}
 	case ".VOB":
 		if strings.EqualFold(upperBase, "VIDEO_TS.VOB") {
 			ifoPath := filepath.Join(filepath.Dir(cleaned), "VIDEO_TS.IFO")
-			if nativeFileExists(ifoPath) {
+			if fileExists(ifoPath) {
 				return ifoPath, true
 			}
 			return "", false
@@ -168,7 +175,7 @@ func nativeDVDMediaInfoIFOPath(path string) (string, bool) {
 			upperBase[8:] == ".VOB" &&
 			upperBase[7] >= '1' && upperBase[7] <= '9' {
 			ifoPath := filepath.Join(filepath.Dir(cleaned), upperBase[:7]+"0.IFO")
-			if nativeFileExists(ifoPath) {
+			if fileExists(ifoPath) {
 				return ifoPath, true
 			}
 		}
@@ -176,7 +183,8 @@ func nativeDVDMediaInfoIFOPath(path string) (string, bool) {
 	return "", false
 }
 
-func nativeDVDMediaInfoTitleVOBPath(path string) (string, bool) {
+// dvdMediaInfoTitleVOBPath 把 DVD 相关路径归一化为对应的首个标题 VOB 路径。
+func dvdMediaInfoTitleVOBPath(path string) (string, bool) {
 	cleaned := strings.TrimSpace(path)
 	if cleaned == "" {
 		return "", false
@@ -185,7 +193,7 @@ func nativeDVDMediaInfoTitleVOBPath(path string) (string, bool) {
 	upperBase := strings.ToUpper(filepath.Base(cleaned))
 	switch filepath.Ext(upperBase) {
 	case ".VOB":
-		if nativeFileExists(cleaned) && nativeLooksLikeDVDSource(cleaned) {
+		if fileExists(cleaned) && looksLikeDVDSource(cleaned) {
 			return cleaned, true
 		}
 	case ".IFO", ".BUP":
@@ -197,7 +205,7 @@ func nativeDVDMediaInfoTitleVOBPath(path string) (string, bool) {
 			upperBase[6] == '_' &&
 			upperBase[7] == '0' {
 			vobPath := filepath.Join(filepath.Dir(cleaned), upperBase[:7]+"1.VOB")
-			if nativeFileExists(vobPath) {
+			if fileExists(vobPath) {
 				return vobPath, true
 			}
 		}
@@ -205,43 +213,46 @@ func nativeDVDMediaInfoTitleVOBPath(path string) (string, bool) {
 	return "", false
 }
 
-func nativeDVDMediaInfoBUPPath(path string) (string, bool) {
+// dvdMediaInfoBUPPath 根据 IFO 路径返回对应的 BUP 路径。
+func dvdMediaInfoBUPPath(path string) (string, bool) {
 	cleaned := strings.TrimSpace(path)
 	if !strings.EqualFold(filepath.Ext(cleaned), ".ifo") {
 		return "", false
 	}
 	bupPath := strings.TrimSuffix(cleaned, filepath.Ext(cleaned)) + ".BUP"
-	if !nativeFileExists(bupPath) {
+	if !fileExists(bupPath) {
 		return "", false
 	}
 	return bupPath, true
 }
 
-func nativeDVDMediaInfoNeedsLanguageFallback(result nativeDVDMediaInfoResult) bool {
+// dvdMediaInfoNeedsLanguageFallback 判断结果中是否仍有字幕轨缺少可用语言信息。
+func dvdMediaInfoNeedsLanguageFallback(result dvdMediaInfoResult) bool {
 	if len(result.Tracks) == 0 {
 		return false
 	}
 	for _, track := range result.Tracks {
-		if !nativeDVDMediaInfoHasLanguage(track.Language) {
+		if !dvdMediaInfoHasLanguage(track.Language) {
 			return true
 		}
 	}
 	return false
 }
 
-func nativeMergeDVDMediaInfoLanguageFallback(primary, fallback nativeDVDMediaInfoResult) (nativeDVDMediaInfoResult, bool) {
+// mergeDVDMediaInfoLanguageFallback 会合并DVD媒体Info语言回退，并保留后续流程仍然需要的有效信息。
+func mergeDVDMediaInfoLanguageFallback(primary, fallback dvdMediaInfoResult) (dvdMediaInfoResult, bool) {
 	if len(primary.Tracks) == 0 || len(fallback.Tracks) == 0 {
 		return primary, false
 	}
 
 	merged := primary
-	merged.Tracks = append([]nativeDVDMediaInfoTrack(nil), primary.Tracks...)
+	merged.Tracks = append([]dvdMediaInfoTrack(nil), primary.Tracks...)
 
-	fallbackByStreamID := make(map[int][]nativeDVDMediaInfoTrack, len(fallback.Tracks))
+	fallbackByStreamID := make(map[int][]dvdMediaInfoTrack, len(fallback.Tracks))
 	fallbackIndexByStreamID := make(map[int][]int, len(fallback.Tracks))
-	fallbackOrdered := make([]nativeDVDMediaInfoTrack, 0, len(fallback.Tracks))
+	fallbackOrdered := make([]dvdMediaInfoTrack, 0, len(fallback.Tracks))
 	for _, track := range fallback.Tracks {
-		if !nativeDVDMediaInfoHasLanguage(track.Language) {
+		if !dvdMediaInfoHasLanguage(track.Language) {
 			continue
 		}
 		fallbackOrdered = append(fallbackOrdered, track)
@@ -258,11 +269,11 @@ func nativeMergeDVDMediaInfoLanguageFallback(primary, fallback nativeDVDMediaInf
 	usedOrdered := make([]bool, len(fallbackOrdered))
 	used := false
 	for index := range merged.Tracks {
-		if nativeDVDMediaInfoHasLanguage(merged.Tracks[index].Language) {
+		if dvdMediaInfoHasLanguage(merged.Tracks[index].Language) {
 			continue
 		}
 
-		if mergedTrack, ok := nativeFillDVDMediaInfoLanguageByStreamID(merged.Tracks[index], fallbackByStreamID, fallbackIndexByStreamID, usedOrdered); ok {
+		if mergedTrack, ok := fillDVDMediaInfoLanguageByStreamID(merged.Tracks[index], fallbackByStreamID, fallbackIndexByStreamID, usedOrdered); ok {
 			merged.Tracks[index] = mergedTrack
 			used = true
 			continue
@@ -272,7 +283,7 @@ func nativeMergeDVDMediaInfoLanguageFallback(primary, fallback nativeDVDMediaInf
 			if usedOrdered[fallbackIndex] {
 				continue
 			}
-			merged.Tracks[index] = nativeMergeDVDMediaInfoTrack(merged.Tracks[index], candidate)
+			merged.Tracks[index] = mergeDVDMediaInfoTrack(merged.Tracks[index], candidate)
 			usedOrdered[fallbackIndex] = true
 			used = true
 			break
@@ -285,7 +296,8 @@ func nativeMergeDVDMediaInfoLanguageFallback(primary, fallback nativeDVDMediaInf
 	return merged, used
 }
 
-func nativeFillDVDMediaInfoLanguageByStreamID(track nativeDVDMediaInfoTrack, fallbackByStreamID map[int][]nativeDVDMediaInfoTrack, fallbackIndexByStreamID map[int][]int, usedOrdered []bool) (nativeDVDMediaInfoTrack, bool) {
+// fillDVDMediaInfoLanguageByStreamID 尝试按 StreamID 从回退结果中补齐单条字幕轨的语言信息。
+func fillDVDMediaInfoLanguageByStreamID(track dvdMediaInfoTrack, fallbackByStreamID map[int][]dvdMediaInfoTrack, fallbackIndexByStreamID map[int][]int, usedOrdered []bool) (dvdMediaInfoTrack, bool) {
 	if track.StreamID <= 0 {
 		return track, false
 	}
@@ -303,13 +315,14 @@ func nativeFillDVDMediaInfoLanguageByStreamID(track nativeDVDMediaInfoTrack, fal
 			continue
 		}
 		usedOrdered[orderedIndex] = true
-		return nativeMergeDVDMediaInfoTrack(track, candidate), true
+		return mergeDVDMediaInfoTrack(track, candidate), true
 	}
 	return track, false
 }
 
-func nativeMergeDVDMediaInfoTrack(track, fallback nativeDVDMediaInfoTrack) nativeDVDMediaInfoTrack {
-	if !nativeDVDMediaInfoHasLanguage(track.Language) && nativeDVDMediaInfoHasLanguage(fallback.Language) {
+// mergeDVDMediaInfoTrack 会合并DVD媒体Info轨道，并保留后续流程仍然需要的有效信息。
+func mergeDVDMediaInfoTrack(track, fallback dvdMediaInfoTrack) dvdMediaInfoTrack {
+	if !dvdMediaInfoHasLanguage(track.Language) && dvdMediaInfoHasLanguage(fallback.Language) {
 		track.Language = fallback.Language
 		track.Source = fallback.Source
 	}
@@ -322,7 +335,8 @@ func nativeMergeDVDMediaInfoTrack(track, fallback nativeDVDMediaInfoTrack) nativ
 	return track
 }
 
-func nativeDVDMediaInfoHasLanguage(language string) bool {
+// dvdMediaInfoHasLanguage 判断语言字段是否包含有效值。
+func dvdMediaInfoHasLanguage(language string) bool {
 	switch strings.ToLower(strings.TrimSpace(language)) {
 	case "", "unknown", "und", "undefined", "null", "n/a", "na":
 		return false
@@ -331,18 +345,20 @@ func nativeDVDMediaInfoHasLanguage(language string) bool {
 	}
 }
 
-func nativeFileExists(path string) bool {
+// fileExists 判断路径是否存在且为普通文件。
+func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
 
-func nativeDecodeMediaInfoPayloads(data []byte) ([]nativeMediaInfoPayload, error) {
-	var single nativeMediaInfoPayload
+// decodeMediaInfoPayloads 兼容 mediainfo 输出的单对象或对象数组 JSON 结构。
+func decodeMediaInfoPayloads(data []byte) ([]mediaInfoPayload, error) {
+	var single mediaInfoPayload
 	if err := json.Unmarshal(data, &single); err == nil {
-		return []nativeMediaInfoPayload{single}, nil
+		return []mediaInfoPayload{single}, nil
 	}
 
-	var multiple []nativeMediaInfoPayload
+	var multiple []mediaInfoPayload
 	if err := json.Unmarshal(data, &multiple); err == nil {
 		return multiple, nil
 	}
@@ -350,9 +366,10 @@ func nativeDecodeMediaInfoPayloads(data []byte) ([]nativeMediaInfoPayload, error
 	return nil, fmt.Errorf("unsupported mediainfo JSON shape")
 }
 
-func nativeMediaInfoTrackString(track map[string]interface{}, keys ...string) string {
+// mediaInfoTrackString 按候选键顺序读取轨道字段，并返回第一个非空字符串值。
+func mediaInfoTrackString(track map[string]interface{}, keys ...string) string {
 	for _, key := range keys {
-		value := strings.TrimSpace(nativeJSONString(track[key]))
+		value := strings.TrimSpace(jsonString(track[key]))
 		if value != "" {
 			return value
 		}
@@ -360,8 +377,9 @@ func nativeMediaInfoTrackString(track map[string]interface{}, keys ...string) st
 	return ""
 }
 
-func nativeParseMediaInfoStreamID(raw string) (int, bool) {
-	matches := nativeMediaInfoHexIDPattern.FindAllStringSubmatch(raw, -1)
+// parseMediaInfoStreamID 会解析媒体Info流ID，并把原始输入转换成结构化结果。
+func parseMediaInfoStreamID(raw string) (int, bool) {
+	matches := mediaInfoHexIDPattern.FindAllStringSubmatch(raw, -1)
 	if len(matches) > 0 {
 		last := matches[len(matches)-1]
 		if len(last) >= 2 {
@@ -382,7 +400,8 @@ func nativeParseMediaInfoStreamID(raw string) (int, bool) {
 	return 0, false
 }
 
-func nativeParseMediaInfoTrackDuration(raw string) (float64, bool) {
+// parseMediaInfoTrackDuration 会解析媒体Info轨道时长，并把原始输入转换成结构化结果。
+func parseMediaInfoTrackDuration(raw string) (float64, bool) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return 0, false
@@ -394,15 +413,16 @@ func nativeParseMediaInfoTrackDuration(raw string) (float64, bool) {
 	return parsed / 1000.0, true
 }
 
-func nativeResolveDVDMediaInfoTracks(raw []nativeSubtitleTrack, tracks []nativeDVDMediaInfoTrack) map[int]nativeDVDMediaInfoTrack {
-	resolved := make(map[int]nativeDVDMediaInfoTrack, len(tracks))
+// resolveDVDMediaInfoTracks 将 MediaInfo 的 DVD 字幕轨尽量映射回 ffprobe 的原始字幕 PID。
+func resolveDVDMediaInfoTracks(raw []subtitleTrack, tracks []dvdMediaInfoTrack) map[int]dvdMediaInfoTrack {
+	resolved := make(map[int]dvdMediaInfoTrack, len(tracks))
 	if len(raw) == 0 || len(tracks) == 0 {
 		return resolved
 	}
 
 	rawPIDSet := make(map[int]struct{}, len(raw))
 	for _, track := range raw {
-		pid, ok := nativeNormalizeStreamPID(track.StreamID)
+		pid, ok := normalizeStreamPID(track.StreamID)
 		if !ok {
 			continue
 		}
@@ -431,7 +451,7 @@ func nativeResolveDVDMediaInfoTracks(raw []nativeSubtitleTrack, tracks []nativeD
 		if strings.ToLower(strings.TrimSpace(track.Codec)) != "dvd_subtitle" {
 			continue
 		}
-		pid, ok := nativeNormalizeStreamPID(track.StreamID)
+		pid, ok := normalizeStreamPID(track.StreamID)
 		if !ok {
 			continue
 		}
@@ -441,7 +461,7 @@ func nativeResolveDVDMediaInfoTracks(raw []nativeSubtitleTrack, tracks []nativeD
 		return rawPIDs[i].pid < rawPIDs[j].pid
 	})
 
-	mediaInfoCopy := append([]nativeDVDMediaInfoTrack(nil), tracks...)
+	mediaInfoCopy := append([]dvdMediaInfoTrack(nil), tracks...)
 	sort.Slice(mediaInfoCopy, func(i, j int) bool {
 		if mediaInfoCopy[i].StreamID != mediaInfoCopy[j].StreamID {
 			return mediaInfoCopy[i].StreamID < mediaInfoCopy[j].StreamID
