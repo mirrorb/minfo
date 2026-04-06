@@ -375,9 +375,14 @@ func blurayHelperNeedsFFprobe(raw []subtitleTrack, helper []blurayHelperTrack) b
 	return false
 }
 
-// blurayHelperNeedsBitrateScan 判断当前蓝光 PGS 是否真的需要再次调用 bdsub 补充 bitrate。
-func blurayHelperNeedsBitrateScan(raw []subtitleTrack, helperResult blurayHelperResult, helper []blurayHelperTrack, bluray []subtitleTrack, blurayMode string) bool {
-	if helperResult.BitrateScanned || len(helper) == 0 {
+// blurayHelperHasPayloadBytes 判断当前 bdsub 结果是否已经补充了可用于热路径排序的 payload_bytes。
+func blurayHelperHasPayloadBytes(result blurayHelperResult) bool {
+	return result.BitrateScanned || result.BitrateMode == "payload-bytes" || result.BitrateMode == "sampled-payload-bytes"
+}
+
+// blurayHelperNeedsPayloadScan 判断当前蓝光 PGS 是否真的需要再次调用 bdsub 补充 payload_bytes。
+func blurayHelperNeedsPayloadScan(raw []subtitleTrack, helperResult blurayHelperResult, helper []blurayHelperTrack, bluray []subtitleTrack, blurayMode string) bool {
+	if blurayHelperHasPayloadBytes(helperResult) || len(helper) == 0 {
 		return false
 	}
 
@@ -441,10 +446,10 @@ func blurayHelperNeedsBitrateScan(raw []subtitleTrack, helperResult blurayHelper
 	return false
 }
 
-// subtitleNeedsBluraySupplement 判断当前语言信息是否不足以区分蓝光字幕优先级。
+// subtitleNeedsBluraySupplement 判断当前语言信息是否仍然完全不足以参与蓝光字幕选轨。
 func subtitleNeedsBluraySupplement(lang, title string) bool {
 	class := classifySubtitleLanguage(strings.TrimSpace(lang + " " + title))
-	return class == "" || class == "zh"
+	return class == ""
 }
 
 // looksLikeDVDSource 通过路径特征判断输入是否看起来像 DVD VIDEO_TS 源。
@@ -530,6 +535,14 @@ func subtitleDispositionScore(forced, isDefault int) int {
 func preferPreferredSubtitleRank(current, best preferredSubtitleRank) bool {
 	if current.LangScore != best.LangScore {
 		return current.LangScore > best.LangScore
+	}
+	if current.LangClass != "" &&
+		current.LangClass == best.LangClass &&
+		current.BitmapKind == bitmapSubtitlePGS &&
+		best.BitmapKind == bitmapSubtitlePGS &&
+		(current.UsePayloadBytes || best.UsePayloadBytes) &&
+		current.PayloadBytes != best.PayloadBytes {
+		return current.PayloadBytes > best.PayloadBytes
 	}
 	if current.LangClass != "" &&
 		current.LangClass == best.LangClass &&

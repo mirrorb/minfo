@@ -212,7 +212,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 	}
 
 	if r.blurayContext.Root != "" && r.blurayContext.Playlist != "" {
-		if result, tracks, ok := r.probeBlurayHelper(r.blurayContext.Playlist, false); ok {
+		if result, tracks, ok := r.probeBlurayHelper(r.blurayContext.Playlist, ""); ok {
 			helperResult = result
 			helperTracks = tracks
 			if !helperTracksHaveClassifiedLang(helperTracks) {
@@ -220,7 +220,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 					if playlist == currentPlaylist {
 						continue
 					}
-					result, altTracks, ok := r.probeBlurayHelper(playlist, false)
+					result, altTracks, ok := r.probeBlurayHelper(playlist, "")
 					if !ok || len(altTracks) == 0 {
 						continue
 					}
@@ -251,16 +251,16 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 					r.logf("[提示] bdsub 字幕元数据不足，但 ffprobe bluray playlist 未能补充更多字幕信息。")
 				}
 			}
-			if blurayHelperNeedsBitrateScan(rawTracks, helperResult, helperTracks, blurayTracks, blurayMode) {
-				r.logf("[信息] 检测到同语言 PGS 候选，开始按 BDInfo TSStreamFile 口径补充 bitrate：playlist %s / clip %s",
+			if blurayHelperNeedsPayloadScan(rawTracks, helperResult, helperTracks, blurayTracks, blurayMode) {
+				r.logf("[信息] 检测到同语言 PGS 候选，开始补充 payload_bytes 用于热路径密度排序：playlist %s / clip %s",
 					r.blurayContext.Playlist,
 					r.blurayContext.Clip,
 				)
-				if result, tracks, ok := r.probeBlurayHelper(r.blurayContext.Playlist, true); ok {
+				if result, tracks, ok := r.probeBlurayHelper(r.blurayContext.Playlist, "payload"); ok {
 					helperResult = result
 					helperTracks = tracks
 				} else {
-					r.logf("[提示] bdsub bitrate 补充失败，将继续按无 bitrate 的规则选轨。")
+					r.logf("[提示] bdsub payload_bytes 补充失败，将继续按无密度数据的规则选轨。")
 				}
 			}
 		}
@@ -387,6 +387,8 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 				PID:              pidValue,
 				PIDOK:            pidOK,
 				BitmapKind:       bitmapSubtitleKindFromCodec(track.Codec),
+				PayloadBytes:     helperMeta.PayloadBytes,
+				UsePayloadBytes:  blurayHelperHasPayloadBytes(helperResult) && helperMetaOK && bitmapSubtitleKindFromCodec(track.Codec) == bitmapSubtitlePGS,
 				Bitrate:          helperMeta.Bitrate,
 				UseBitrate:       helperResult.BitrateScanned && helperMetaOK && bitmapSubtitleKindFromCodec(track.Codec) == bitmapSubtitlePGS,
 			}
@@ -435,9 +437,12 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		relativeIndex = 0
 	}
 
-	bitrateSuffix := ""
+	densitySuffix := ""
+	if bestRank.UsePayloadBytes {
+		densitySuffix = fmt.Sprintf("，payload_bytes=%d", bestRank.PayloadBytes)
+	}
 	if bestRank.UseBitrate {
-		bitrateSuffix = fmt.Sprintf("，bitrate=%d", bestRank.Bitrate)
+		densitySuffix += fmt.Sprintf("，bitrate=%d", bestRank.Bitrate)
 	}
 
 	r.logf("[信息] 选择内挂字幕：流索引 %d / 字幕序号 %d （语言：%s，title：%s，default=%d，forced=%d，字幕格式：%s，codec：%s%s）",
@@ -449,7 +454,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		best.Forced,
 		subtitleFormatLabel(best.Codec),
 		best.Codec,
-		bitrateSuffix,
+		densitySuffix,
 	)
 
 	return subtitleSelection{
@@ -501,14 +506,17 @@ func (r *screenshotRunner) listBlurayPlaylistsRanked() []string {
 	return playlists
 }
 
-// probeBlurayHelper 调用 bdsub 探测当前蓝光 playlist 的字幕元数据；必要时再补充 BDInfo 风格 bitrate 扫描。
-func (r *screenshotRunner) probeBlurayHelper(playlist string, scanBitrate bool) (blurayHelperResult, []blurayHelperTrack, bool) {
+// probeBlurayHelper 调用 bdsub 探测当前蓝光 playlist 的字幕元数据；必要时再补充 payload_bytes 或 exact bitrate。
+func (r *screenshotRunner) probeBlurayHelper(playlist string, scanMode string) (blurayHelperResult, []blurayHelperTrack, bool) {
 	if r.bdsubBin == "" || r.blurayContext.Root == "" || r.blurayContext.Clip == "" {
 		return blurayHelperResult{}, nil, false
 	}
 
 	args := []string{r.blurayContext.Root, "--playlist", playlist, "--clip", r.blurayContext.Clip}
-	if scanBitrate {
+	switch scanMode {
+	case "payload":
+		args = append(args, "--scan-payload")
+	case "bitrate":
 		args = append(args, "--scan-bitrate")
 	}
 	stdout, stderr, err := system.RunCommandLive(r.ctx, r.bdsubBin, func(stream, line string) {
@@ -543,9 +551,12 @@ func (r *screenshotRunner) probeBlurayHelper(playlist string, scanBitrate bool) 
 		return blurayHelperResult{}, nil, false
 	}
 
-	if scanBitrate {
+	switch scanMode {
+	case "payload":
+		r.logf("[信息] 已调用 bdsub（metadata+payload）：%s / playlist %s / clip %s", r.blurayContext.Root, playlist, r.blurayContext.Clip)
+	case "bitrate":
 		r.logf("[信息] 已调用 bdsub（metadata+bitrate）：%s / playlist %s / clip %s", r.blurayContext.Root, playlist, r.blurayContext.Clip)
-	} else {
+	default:
 		r.logf("[信息] 已调用 bdsub（metadata-only）：%s / playlist %s / clip %s", r.blurayContext.Root, playlist, r.blurayContext.Clip)
 	}
 	return result, result.Clip.PGStreams, true
@@ -607,6 +618,7 @@ func (r *screenshotRunner) logInternalSubtitleTracks(raw []subtitleTrack, helper
 		titleForPick := track.Title
 		tagDetails := make([]string, 0, 4)
 		pidDetail := ""
+		payloadDetail := ""
 		bitrateDetail := ""
 		helperMeta := blurayHelperTrack{}
 		helperMetaOK := false
@@ -629,11 +641,17 @@ func (r *screenshotRunner) logInternalSubtitleTracks(raw []subtitleTrack, helper
 					langForPick = strings.ToLower(strings.TrimSpace(helperMeta.Lang))
 				}
 			}
-			if helperMetaOK && helperResult.BitrateScanned {
-				bitrateDetail = fmt.Sprintf(" | bitrate=%d", helperMeta.Bitrate)
-				tagDetails = append(tagDetails, fmt.Sprintf("bdsub: coding_type=%d, char_code=%d, subpath_id=%d, bitrate=%d", helperMeta.CodingType, helperMeta.CharCode, helperMeta.SubpathID, helperMeta.Bitrate))
-			} else if helperMetaOK {
-				tagDetails = append(tagDetails, fmt.Sprintf("bdsub: coding_type=%d, char_code=%d, subpath_id=%d", helperMeta.CodingType, helperMeta.CharCode, helperMeta.SubpathID))
+			if helperMetaOK {
+				bdsubTag := fmt.Sprintf("bdsub: coding_type=%d, char_code=%d, subpath_id=%d", helperMeta.CodingType, helperMeta.CharCode, helperMeta.SubpathID)
+				if blurayHelperHasPayloadBytes(helperResult) {
+					payloadDetail = fmt.Sprintf(" | payload_bytes=%d", helperMeta.PayloadBytes)
+					bdsubTag += fmt.Sprintf(", payload_bytes=%d", helperMeta.PayloadBytes)
+				}
+				if helperResult.BitrateScanned {
+					bitrateDetail = fmt.Sprintf(" | bitrate=%d", helperMeta.Bitrate)
+					bdsubTag += fmt.Sprintf(", bitrate=%d", helperMeta.Bitrate)
+				}
+				tagDetails = append(tagDetails, bdsubTag)
 			}
 			if meta, ok := dvdTrackByStreamID[pid]; ok {
 				if strings.TrimSpace(meta.Language) != "" {
@@ -671,7 +689,7 @@ func (r *screenshotRunner) logInternalSubtitleTracks(raw []subtitleTrack, helper
 			langClass = "未识别"
 		}
 
-		r.logf("[字幕] 流索引 %d / 字幕序号 %d%s | 格式：%s | 语言：%s | title：%s | default=%d | forced=%d | codec=%s | 分类=%s | 处理=%s%s",
+		r.logf("[字幕] 流索引 %d / 字幕序号 %d%s | 格式：%s | 语言：%s | title：%s | default=%d | forced=%d | codec=%s | 分类=%s | 处理=%s%s%s",
 			track.Index,
 			index,
 			pidDetail,
@@ -683,6 +701,7 @@ func (r *screenshotRunner) logInternalSubtitleTracks(raw []subtitleTrack, helper
 			track.Codec,
 			langClass,
 			subtitleHandlingLabel(track.Codec),
+			payloadDetail,
 			bitrateDetail,
 		)
 
@@ -701,10 +720,11 @@ func (r *screenshotRunner) logInternalSubtitleTracks(raw []subtitleTrack, helper
 	}
 
 	if (blurayMode == "helper" || blurayMode == "helper+ffprobe") && helperResult.Source != "" {
-		r.logf("[信息] bdsub 来源：%s / clip=%s / pg_stream_count=%d / bitrate_scanned=%t / bitrate_mode=%s / packet_seconds=%.3f",
+		r.logf("[信息] bdsub 来源：%s / clip=%s / pg_stream_count=%d / payload_ready=%t / bitrate_scanned=%t / bitrate_mode=%s / packet_seconds=%.3f",
 			helperResult.Source,
 			displayProbeValue(helperResult.Clip.ClipID),
 			helperResult.Clip.PGStreamCount,
+			blurayHelperHasPayloadBytes(helperResult),
 			helperResult.BitrateScanned,
 			displayProbeValue(helperResult.BitrateMode),
 			helperResult.Clip.PacketSeconds,

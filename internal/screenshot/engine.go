@@ -78,12 +78,13 @@ type subtitleTrack struct {
 }
 
 type blurayHelperTrack struct {
-	PID        int    `json:"pid"`
-	Lang       string `json:"lang"`
-	CodingType int    `json:"coding_type"`
-	CharCode   int    `json:"char_code"`
-	SubpathID  int    `json:"subpath_id"`
-	Bitrate    int64  `json:"bitrate"`
+	PID          int    `json:"pid"`
+	Lang         string `json:"lang"`
+	CodingType   int    `json:"coding_type"`
+	CharCode     int    `json:"char_code"`
+	SubpathID    int    `json:"subpath_id"`
+	PayloadBytes uint64 `json:"payload_bytes"`
+	Bitrate      int64  `json:"bitrate"`
 }
 
 type blurayHelperResult struct {
@@ -111,6 +112,8 @@ type preferredSubtitleRank struct {
 	PID              int
 	PIDOK            bool
 	BitmapKind       bitmapSubtitleKind
+	PayloadBytes     uint64
+	UsePayloadBytes  bool
 	Bitrate          int64
 	UseBitrate       bool
 }
