@@ -39,12 +39,15 @@ type stagedSource struct {
 
 // Run 会执行完整的 BDInfo 处理流程，包括源路径准备、命令调用和报告整理。
 func Run(ctx context.Context, inputPath string, options RunOptions) (Result, error) {
-	resolvedPath, cleanup, err := media.ResolveBDInfoSource(ctx, inputPath)
+	resolved, cleanup, err := media.ResolveBDInfoSource(ctx, inputPath)
 	if err != nil {
 		return Result{}, err
 	}
 	defer cleanup()
-	options.logf("[bdinfo] 实际检测路径: %s", resolvedPath)
+	options.logf("[bdinfo] 实际检测路径: %s", resolved.Path)
+	if resolved.Playlist != "" {
+		options.logf("[bdinfo] 指定 playlist: %s", resolved.Playlist)
+	}
 
 	binaryPath, err := resolveBinary()
 	if err != nil {
@@ -52,13 +55,13 @@ func Run(ctx context.Context, inputPath string, options RunOptions) (Result, err
 	}
 	options.logf("[bdinfo] 使用命令: %s", binaryPath)
 
-	staged, err := stageSource(ctx, resolvedPath, options)
+	staged, err := stageSource(ctx, resolved.Path, options)
 	if err != nil {
 		return Result{}, err
 	}
 	defer staged.cleanup()
 
-	args, err := buildCommandArgs(staged.scanInput, staged.workDir)
+	args, err := buildCommandArgs(staged.scanInput, staged.workDir, resolved.Playlist)
 	if err != nil {
 		return Result{}, err
 	}
@@ -90,7 +93,7 @@ func Run(ctx context.Context, inputPath string, options RunOptions) (Result, err
 	}
 
 	return Result{
-		ResolvedPath: resolvedPath,
+		ResolvedPath: resolved.Path,
 		Output:       output,
 	}, nil
 }
@@ -113,15 +116,20 @@ func resolveBinary() (string, error) {
 }
 
 // buildCommandArgs 会按 BDInfoCLI 的位置参数规则构建命令参数。
-func buildCommandArgs(scanInput, reportDir string) ([]string, error) {
+func buildCommandArgs(scanInput, reportDir, playlist string) ([]string, error) {
 	extraArgs, err := splitCommandArgs(strings.TrimSpace(os.Getenv("BDINFO_ARGS")))
 	if err != nil {
 		return nil, fmt.Errorf("invalid BDINFO_ARGS: %w", err)
 	}
 
-	args := make([]string, 0, len(extraArgs)+3)
+	args := make([]string, 0, len(extraArgs)+5)
 	args = append(args, extraArgs...)
-	if !hasPlaylistSelectionArg(extraArgs) {
+	selectionSpecified := hasPlaylistSelectionArg(extraArgs)
+	if playlist != "" && !selectionSpecified {
+		args = append(args, "-m", playlist)
+		selectionSpecified = true
+	}
+	if !selectionSpecified {
 		// BDInfoCLI 默认会进入交互式 playlist 选择；服务端场景没有 TTY，
 		// 因此默认切到 whole-disc 模式，再由后续逻辑提取主播放列表区块。
 		args = append(args, "-w")

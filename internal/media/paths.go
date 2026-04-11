@@ -14,9 +14,10 @@ import (
 
 // SuggestedPath 表示路径联想结果中的一个候选项。
 type SuggestedPath struct {
-	Path  string
-	IsDir bool
-	Size  int64
+	Path     string
+	IsDir    bool
+	Size     int64
+	Duration string
 }
 
 // SuggestPaths 根据前缀在媒体根目录或 ISO 虚拟目录中生成路径联想结果。
@@ -193,6 +194,7 @@ func suggestVirtualISOPaths(roots []string, prefix string, limit int) ([]Suggest
 				return nil, "", err
 			}
 			item.Size = info.Size()
+			item.Duration = readSuggestedPathDuration(filepath.Join(dirOnDisk, name))
 		}
 		items = append(items, item)
 		if limit > 0 && len(items) >= limit {
@@ -231,6 +233,7 @@ func listDir(dir, base string, limit int) ([]SuggestedPath, error) {
 				return nil, err
 			}
 			item.Size = info.Size()
+			item.Duration = readSuggestedPathDuration(full)
 		}
 		items = append(items, item)
 		if limit > 0 && len(items) >= limit {
@@ -241,6 +244,18 @@ func listDir(dir, base string, limit int) ([]SuggestedPath, error) {
 		return items[i].Path < items[j].Path
 	})
 	return items, nil
+}
+
+// readSuggestedPathDuration 在候选路径为 MPLS 文件时返回格式化时长。
+func readSuggestedPathDuration(path string) string {
+	if !isMPLSFile(path) {
+		return ""
+	}
+	duration, err := readMPLSDuration(path)
+	if err != nil {
+		return ""
+	}
+	return formatMPLSDuration(duration)
 }
 
 // hasDirectorySuffix 会判断DirectorySuffix是否已经存在或具备。

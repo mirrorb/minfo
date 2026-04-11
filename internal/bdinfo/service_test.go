@@ -21,7 +21,7 @@ func TestDefaultBinaryPath(t *testing.T) {
 func TestBuildCommandArgsDefaultsToWholeDiscMode(t *testing.T) {
 	t.Setenv("BDINFO_ARGS", "")
 
-	args, err := buildCommandArgs("/media/disc", "/tmp/report")
+	args, err := buildCommandArgs("/media/disc", "/tmp/report", "")
 	if err != nil {
 		t.Fatalf("buildCommandArgs returned error: %v", err)
 	}
@@ -41,12 +41,32 @@ func TestBuildCommandArgsDefaultsToWholeDiscMode(t *testing.T) {
 func TestBuildCommandArgsKeepsExplicitPlaylistSelection(t *testing.T) {
 	t.Setenv("BDINFO_ARGS", `-m "00006.MPLS,00009.MPLS"`)
 
-	args, err := buildCommandArgs("/media/disc", "/tmp/report")
+	args, err := buildCommandArgs("/media/disc", "/tmp/report", "")
 	if err != nil {
 		t.Fatalf("buildCommandArgs returned error: %v", err)
 	}
 
 	want := []string{"-m", "00006.MPLS,00009.MPLS", "/media/disc", "/tmp/report"}
+	if len(args) != len(want) {
+		t.Fatalf("len(args) = %d, want %d (%q)", len(args), len(want), args)
+	}
+	for index := range want {
+		if args[index] != want[index] {
+			t.Fatalf("args[%d] = %q, want %q", index, args[index], want[index])
+		}
+	}
+}
+
+// TestBuildCommandArgsUsesSelectedMPLS 验证单个 MPLS 输入会自动转换成 -m playlist。
+func TestBuildCommandArgsUsesSelectedMPLS(t *testing.T) {
+	t.Setenv("BDINFO_ARGS", "")
+
+	args, err := buildCommandArgs("/media/disc", "/tmp/report", "00080.MPLS")
+	if err != nil {
+		t.Fatalf("buildCommandArgs returned error: %v", err)
+	}
+
+	want := []string{"-m", "00080.MPLS", "/media/disc", "/tmp/report"}
 	if len(args) != len(want) {
 		t.Fatalf("len(args) = %d, want %d (%q)", len(args), len(want), args)
 	}

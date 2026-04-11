@@ -61,6 +61,7 @@
                             <span class="browser-row-name">{{ entry.name }}</span>
                         </div>
                         <div class="browser-row-side">
+                            <span v-if="showEntryDuration(entry)" class="browser-row-duration">{{ entry.duration }}</span>
                             <span v-if="showEntrySize(entry)" class="browser-row-size">{{ formatEntrySize(entry.size) }}</span>
                             <button
                                 v-if="entry.isISO"
@@ -114,11 +115,16 @@ const entryIcon = (entry) => {
     if (entry?.isISO) {
         return "💿";
     }
+    if (entry?.isMPLS) {
+        return "🎞";
+    }
     if (entry?.isVideo) {
         return "🎬";
     }
     return "📄";
 };
+
+const showEntryDuration = (entry) => typeof entry?.duration === "string" && entry.duration !== "";
 
 const showEntrySize = (entry) => !entry?.isDir && Number.isFinite(entry?.size) && entry.size > 0;
 

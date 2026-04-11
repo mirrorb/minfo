@@ -27,6 +27,12 @@ type videoCandidate struct {
 	size int64
 }
 
+// BDInfoSource 表示 BDInfo 实际扫描路径以及可选的指定 playlist。
+type BDInfoSource struct {
+	Path     string
+	Playlist string
+}
+
 // ResolveScreenshotSource 把输入路径解析成可直接交给截图流程的实际视频文件，并返回可能需要的清理函数。
 func ResolveScreenshotSource(ctx context.Context, input string) (string, func(), error) {
 	info, err := os.Stat(input)
@@ -132,21 +138,24 @@ func ResolveDVDMediaInfoSource(ctx context.Context, input string) (string, func(
 	return "", func() {}, errors.New("path does not contain DVD VIDEO_TS content")
 }
 
-// ResolveBDInfoSource 把输入路径解析成 BDInfo 可以扫描的目录，并在需要时挂载 ISO。
-func ResolveBDInfoSource(ctx context.Context, input string) (string, func(), error) {
+// ResolveBDInfoSource 把输入路径解析成 BDInfo 可以扫描的目录，并在需要时附带指定 playlist。
+func ResolveBDInfoSource(ctx context.Context, input string) (BDInfoSource, func(), error) {
 	info, err := os.Stat(input)
 	if err != nil {
-		return "", func() {}, err
+		return BDInfoSource{}, func() {}, err
 	}
 	if !info.IsDir() {
 		if isISOFile(input) {
 			return resolveBDInfoFromMountedISO(ctx, input)
 		}
-		return "", func() {}, errors.New("path must be a folder containing BDMV or ISO")
+		if root, playlist, ok := resolveBDInfoPlaylistSelection(input); ok {
+			return BDInfoSource{Path: root, Playlist: playlist}, func() {}, nil
+		}
+		return BDInfoSource{}, func() {}, errors.New("path must be a folder containing BDMV or ISO, or a MPLS file under BDMV/PLAYLIST")
 	}
 
 	if bdmvRoot, ok := resolveBDInfoRoot(input); ok {
-		return bdmvRoot, func() {}, nil
+		return BDInfoSource{Path: bdmvRoot}, func() {}, nil
 	}
 
 	isoPath, err := findISOInDir(input)
@@ -154,17 +163,20 @@ func ResolveBDInfoSource(ctx context.Context, input string) (string, func(), err
 		return resolveBDInfoFromMountedISO(ctx, isoPath)
 	}
 	if !errors.Is(err, errNoISO) {
-		return "", func() {}, err
+		return BDInfoSource{}, func() {}, err
 	}
 
-	return "", func() {}, errors.New("path does not contain BDMV or BDISO content")
+	return BDInfoSource{}, func() {}, errors.New("path does not contain BDMV or BDISO content")
 }
 
-// resolveBDInfoRoot 返回路径对应的蓝光根目录；它接受光盘根目录、BDMV 目录和 STREAM 目录。
+// resolveBDInfoRoot 返回路径对应的蓝光根目录；它接受光盘根目录、BDMV/PLAYLIST/STREAM 目录。
 func resolveBDInfoRoot(path string) (string, bool) {
 	base := filepath.Base(path)
 	if strings.EqualFold(base, "BDMV") {
 		return filepath.Dir(path), true
+	}
+	if strings.EqualFold(base, "PLAYLIST") {
+		return filepath.Dir(filepath.Dir(path)), true
 	}
 	if strings.EqualFold(base, "STREAM") {
 		return filepath.Dir(filepath.Dir(path)), true
@@ -321,16 +333,17 @@ func resolveVideoFromMountedISO(ctx context.Context, isoPath string) (string, fu
 }
 
 // resolveBDInfoFromMountedISO 挂载 ISO 并返回其中可供 BDInfo 扫描的蓝光根目录。
-func resolveBDInfoFromMountedISO(ctx context.Context, isoPath string) (string, func(), error) {
+func resolveBDInfoFromMountedISO(ctx context.Context, isoPath string) (BDInfoSource, func(), error) {
 	mountDir, cleanup, err := mountISO(ctx, isoPath)
 	if err != nil {
-		return "", func() {}, err
+		return BDInfoSource{}, func() {}, err
 	}
-	if _, ok := resolveBDInfoRoot(mountDir); !ok {
+	root, ok := resolveBDInfoRoot(mountDir)
+	if !ok {
 		cleanup()
-		return "", func() {}, errors.New("BDMV folder not found in ISO")
+		return BDInfoSource{}, func() {}, errors.New("BDMV folder not found in ISO")
 	}
-	return mountDir, cleanup, nil
+	return BDInfoSource{Path: root}, cleanup, nil
 }
 
 // isVideoFile 判断路径是否属于当前支持的视频扩展名。

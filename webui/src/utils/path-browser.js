@@ -46,6 +46,7 @@ export function buildEntries(items) {
         let rawPath = "";
         let explicitDir = false;
         let size = 0;
+        let duration = "";
 
         if (typeof raw === "string") {
             rawPath = raw.trim();
@@ -54,6 +55,7 @@ export function buildEntries(items) {
             explicitDir = raw.isDir === true;
             const parsedSize = Number.parseInt(`${raw.size ?? ""}`.trim(), 10);
             size = Number.isFinite(parsedSize) && parsedSize > 0 ? parsedSize : 0;
+            duration = typeof raw.duration === "string" ? raw.duration.trim() : "";
         }
 
         if (rawPath === "") {
@@ -66,7 +68,9 @@ export function buildEntries(items) {
             name: getEntryName(rawPath),
             isDir,
             isISO: !isDir && isISOFilePath(clean),
+            isMPLS: !isDir && isMPLSFilePath(clean),
             isVideo: !isDir && isVideoFilePath(clean),
+            duration: isDir ? "" : duration,
             size: isDir ? 0 : size,
         });
     }
@@ -169,6 +173,10 @@ export function buildVirtualISOPath(isoPath, innerPath = "/") {
 
 function isISOFilePath(value) {
     return /\.iso$/i.test(value || "");
+}
+
+function isMPLSFilePath(value) {
+    return /\.mpls$/i.test(value || "");
 }
 
 function isVideoFilePath(value) {

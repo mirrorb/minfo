@@ -398,6 +398,14 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
 }
 
+.browser-row-duration {
+  color: var(--accent);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .browser-enter-btn {
   flex: 0 0 auto;
   padding: 5px 10px;

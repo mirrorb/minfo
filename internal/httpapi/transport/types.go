@@ -44,9 +44,10 @@ type InfoJobResponse struct {
 
 // PathItem 表示路径联想接口返回的一条候选路径。
 type PathItem struct {
-	Path  string `json:"path"`
-	IsDir bool   `json:"isDir,omitempty"`
-	Size  int64  `json:"size,omitempty"`
+	Path     string `json:"path"`
+	IsDir    bool   `json:"isDir,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+	Duration string `json:"duration,omitempty"`
 }
 
 // PathResponse 表示路径联想接口的 JSON 响应。
