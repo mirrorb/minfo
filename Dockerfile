@@ -1,6 +1,6 @@
-ARG BDINFO_REPO=https://github.com/mirrorb/BDInfo.git
+ARG BDINFO_REPO=https://github.com/mirrorb/BDInfoCLI.git
 ARG BDINFO_REF=master
-ARG BDINFO_CSPROJ=BDInfo.Core/BDInfo/BDInfo.csproj
+ARG BDINFO_CSPROJ=BDInfo/BDInfo.csproj
 ARG GO_VERSION=1.26.1
 ARG APP_VERSION=dev
 

@@ -17,10 +17,7 @@ import (
 	"minfo/internal/system"
 )
 
-const (
-	defaultBinaryPath = system.BDInfoBinaryPath
-	defaultReportName = "bdinfo.txt"
-)
+const defaultBinaryPath = system.BDInfoBinaryPath
 
 // RunOptions 定义 BDInfo 执行过程中的可选日志回调。
 type RunOptions struct {
@@ -61,7 +58,7 @@ func Run(ctx context.Context, inputPath string, options RunOptions) (Result, err
 	}
 	defer staged.cleanup()
 
-	args, err := buildCommandArgs(staged.scanInput)
+	args, err := buildCommandArgs(staged.scanInput, staged.workDir)
 	if err != nil {
 		return Result{}, err
 	}
@@ -115,15 +112,39 @@ func resolveBinary() (string, error) {
 	return binaryPath, nil
 }
 
-// buildCommandArgs 会构建命令参数，为后续流程准备好可直接使用的结果。
-func buildCommandArgs(scanInput string) ([]string, error) {
-	args := []string{"-p", scanInput, "-o", defaultReportName}
-
+// buildCommandArgs 会按 BDInfoCLI 的位置参数规则构建命令参数。
+func buildCommandArgs(scanInput, reportDir string) ([]string, error) {
 	extraArgs, err := splitCommandArgs(strings.TrimSpace(os.Getenv("BDINFO_ARGS")))
 	if err != nil {
 		return nil, fmt.Errorf("invalid BDINFO_ARGS: %w", err)
 	}
-	return append(args, extraArgs...), nil
+
+	args := make([]string, 0, len(extraArgs)+3)
+	args = append(args, extraArgs...)
+	if !hasPlaylistSelectionArg(extraArgs) {
+		// BDInfoCLI 默认会进入交互式 playlist 选择；服务端场景没有 TTY，
+		// 因此默认切到 whole-disc 模式，再由后续逻辑提取主播放列表区块。
+		args = append(args, "-w")
+	}
+	args = append(args, scanInput, reportDir)
+	return args, nil
+}
+
+// hasPlaylistSelectionArg 判断额外参数里是否已经显式指定了 playlist 选择模式。
+func hasPlaylistSelectionArg(args []string) bool {
+	for _, arg := range args {
+		switch {
+		case arg == "-w", arg == "--whole":
+			return true
+		case arg == "-l", arg == "--list":
+			return true
+		case arg == "-m", arg == "--mpls":
+			return true
+		case strings.HasPrefix(arg, "-m="), strings.HasPrefix(arg, "--mpls="):
+			return true
+		}
+	}
+	return false
 }
 
 // splitCommandArgs 以接近 shell 的规则拆分 BDINFO_ARGS，并保留引号和转义语义。
@@ -321,14 +342,10 @@ func bindMountPath(ctx context.Context, sourcePath, targetPath string) (bool, fu
 
 // findReportFile 会查找报告文件，并在多个候选项中返回最合适的结果。
 func findReportFile(workDir string) (string, error) {
-	reportPath := filepath.Join(workDir, defaultReportName)
-	if info, err := os.Stat(reportPath); err == nil && !info.IsDir() {
-		return reportPath, nil
-	}
-
 	type candidate struct {
 		path    string
 		modTime time.Time
+		isText  bool
 	}
 
 	candidates := make([]candidate, 0, 4)
@@ -347,6 +364,7 @@ func findReportFile(workDir string) (string, error) {
 		candidates = append(candidates, candidate{
 			path:    filepath.Join(workDir, entry.Name()),
 			modTime: info.ModTime(),
+			isText:  strings.EqualFold(filepath.Ext(entry.Name()), ".txt"),
 		})
 	}
 	if len(candidates) == 0 {
@@ -354,6 +372,9 @@ func findReportFile(workDir string) (string, error) {
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].isText != candidates[j].isText {
+			return candidates[i].isText
+		}
 		if candidates[i].modTime.Equal(candidates[j].modTime) {
 			return candidates[i].path < candidates[j].path
 		}

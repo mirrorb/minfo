@@ -7,7 +7,7 @@
 ## 支持功能
 
 - 输出 `MediaInfo` 信息
-- 输出 `BDInfo` 信息，支持精简报告和完整报告
+- 输出 `BDInfo` 信息，支持精简报告和完整报告，底层使用 [tetrahydroc/BDInfoCLI](https://github.com/tetrahydroc/BDInfoCLI)
 - 生成截图并打包为 ZIP 下载
 - 生成截图后上传到 `Pixhost`
 - 截图支持 `PNG` / `JPG`
