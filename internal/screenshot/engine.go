@@ -162,13 +162,21 @@ type screenshotRunner struct {
 	subtitleIndex            []subtitleSpan
 	rejectedBitmapCandidates map[string]struct{}
 	tempSubtitleFile         string
+	dvdMediaInfoResult       dvdMediaInfoResult
+	hasDVDMediaInfoResult    bool
 
 	startOffset float64
 	duration    float64
 	videoWidth  int
 	videoHeight int
+	aspectChain string
 	colorInfo   string
 	colorChain  string
+
+	activeShotIndex   int
+	activeShotTotal   int
+	activeShotName    string
+	activeRenderPhase string
 }
 
 // runEngineScreenshotsWithLiveLogs 会解析输入源、生成随机时间点，并启动带实时日志的截图引擎流程。
@@ -242,7 +250,7 @@ func variantSettingsFor(variant string) variantSettings {
 			CoarseBackPGS:  8,
 			SearchBack:     4,
 			SearchForward:  8,
-			JPGQuality:     2,
+			JPGQuality:     1,
 		}
 	default:
 		return variantSettings{
@@ -289,30 +297,40 @@ func (r *screenshotRunner) init(timestamps []string) error {
 		return err
 	}
 
+	r.startOffset = r.detectStartOffset()
+
+	r.duration, err = probeMediaDuration(r.ctx, r.ffprobeBin, r.sourcePath)
+	if err != nil {
+		return err
+	}
+
+	if looksLikeDVDSource(r.dvdProbeSource()) {
+		_, _, _ = r.ensureDVDMediaInfoResult()
+	}
+
 	if r.subtitleMode != SubtitleModeOff {
 		r.prepareBlurayProbeContext()
 	}
-	r.chooseSubtitle()
+	if err := r.chooseSubtitle(); err != nil {
+		return err
+	}
 	if err := r.prepareTextSubtitleRenderSource(); err != nil {
 		return err
 	}
 	r.logSelectedSubtitleSummary()
 
-	r.startOffset = r.detectStartOffset()
-	r.duration, err = probeMediaDuration(r.ctx, r.ffprobeBin, r.sourcePath)
-	if err != nil {
-		return err
-	}
 	r.videoWidth, r.videoHeight = r.detectVideoDimensions()
+	r.aspectChain = r.detectDisplayAspectFilter()
 
-	if r.variant == VariantPNG {
-		r.colorInfo = r.detectColorspace()
-		r.colorChain = buildColorspaceChain(r.colorInfo)
-		if r.colorInfo != "" {
-			r.logf("[信息] 检测到色彩空间：%s", strings.TrimSuffix(r.colorInfo, "|"))
-		} else {
-			r.logf("[信息] 无法检测色彩空间，将使用标准转换")
+	r.colorInfo = r.detectColorspace()
+	r.colorChain = buildColorspaceChain(r.colorInfo)
+	if r.colorInfo != "" {
+		r.logf("[信息] 检测到色彩空间：%s", strings.TrimSuffix(r.colorInfo, "|"))
+		if r.colorChain != "" {
+			r.logf("[信息] HDR/WCG 主截图将统一应用 tone mapping / 色域映射。")
 		}
+	} else {
+		r.logf("[信息] 无法检测色彩空间，将使用标准转换")
 	}
 
 	r.logf("[信息] 容器起始偏移：%.3fs | 影片总时长：%s", r.startOffset, secToHMS(r.duration))
@@ -334,6 +352,9 @@ func (r *screenshotRunner) run() ([]string, error) {
 	failures := make([]string, 0)
 	usedNames := make(map[string]int, len(r.requested))
 	usedSeconds := make(map[int]struct{}, len(r.requested))
+	totalShots := len(r.requested)
+	processedShots := 0
+	startedShots := 0
 
 	for _, requested := range r.requested {
 		aligned := requested
@@ -362,13 +383,32 @@ func (r *screenshotRunner) run() ([]string, error) {
 			secToHMSMS(aligned),
 			outputName,
 		)
+		startedShots++
+		r.activeShotIndex = startedShots
+		r.activeShotTotal = totalShots
+		r.activeShotName = outputName
+		r.activeRenderPhase = "render"
+		r.logProgress("截图开始", startedShots, totalShots, fmt.Sprintf("正在渲染第 %d/%d 张截图：%s", startedShots, totalShots, outputName))
 
 		if err := r.captureScreenshot(aligned, outputPath); err != nil {
 			failures = append(failures, fmt.Sprintf("[失败] 文件: %s\n原因: %s", filepath.Base(outputPath), err.Error()))
+			processedShots++
+			r.logProgress("截图完成", processedShots, totalShots, fmt.Sprintf("第 %d/%d 张截图失败：%s", processedShots, totalShots, outputName))
+			r.activeShotIndex = 0
+			r.activeShotTotal = 0
+			r.activeShotName = ""
+			r.activeRenderPhase = ""
 			continue
 		}
 		usedSeconds[screenshotSecond(aligned)] = struct{}{}
 		successCount++
+		processedShots++
+		r.logProgress("截图完成", processedShots, totalShots, fmt.Sprintf("已完成第 %d/%d 张截图：%s", processedShots, totalShots, outputName))
+
+		r.activeShotIndex = 0
+		r.activeShotTotal = 0
+		r.activeShotName = ""
+		r.activeRenderPhase = ""
 	}
 
 	r.logf("")
@@ -383,6 +423,7 @@ func (r *screenshotRunner) run() ([]string, error) {
 		}
 	}
 
+	r.logProgress("整理", 1, 4, "正在整理截图文件列表。")
 	files, err := listScreenshotFiles(r.outputDir)
 	if err != nil {
 		if successCount == 0 {

@@ -13,6 +13,8 @@ import (
 	"strings"
 )
 
+const progressLogPrefix = "[进度]"
+
 // logs 返回当前截图运行器已经累积的完整日志文本。
 func (r *screenshotRunner) logs() string {
 	return strings.TrimSpace(strings.Join(r.logLines, "\n"))
@@ -25,6 +27,51 @@ func (r *screenshotRunner) logf(format string, args ...interface{}) {
 	if r.logHandler != nil {
 		r.logHandler(line)
 	}
+}
+
+// logProgress 会写入一条稳定格式的进度日志，供上层推导阶段型进度。
+func (r *screenshotRunner) logProgress(stage string, current, total int, detail string) {
+	r.logf("%s %s %d/%d: %s", progressLogPrefix, strings.TrimSpace(stage), current, total, strings.TrimSpace(detail))
+}
+
+// logProgressPercent 会写入一条带百分比的进度日志，适合外部工具实时进度。
+func (r *screenshotRunner) logProgressPercent(stage string, percent float64, detail string) {
+	r.logf("%s %s %s%%: %s", progressLogPrefix, strings.TrimSpace(stage), formatProgressPercent(percent), strings.TrimSpace(detail))
+}
+
+// EmitProgressLog 会通过实时日志回调输出一条统一格式的进度日志。
+func EmitProgressLog(onLog LogHandler, stage string, current, total int, detail string) {
+	if onLog == nil {
+		return
+	}
+	onLog(fmt.Sprintf("%s %s %d/%d: %s", progressLogPrefix, strings.TrimSpace(stage), current, total, strings.TrimSpace(detail)))
+}
+
+// EmitProgressPercentLog 会通过实时日志回调输出一条带百分比的进度日志。
+func EmitProgressPercentLog(onLog LogHandler, stage string, percent float64, detail string) {
+	if onLog == nil {
+		return
+	}
+	onLog(fmt.Sprintf("%s %s %s%%: %s", progressLogPrefix, strings.TrimSpace(stage), formatProgressPercent(percent), strings.TrimSpace(detail)))
+}
+
+func clampProgressPercent(percent float64) float64 {
+	switch {
+	case percent < 0:
+		return 0
+	case percent > 100:
+		return 100
+	default:
+		return math.Round(percent*10) / 10
+	}
+}
+
+func formatProgressPercent(percent float64) string {
+	clamped := clampProgressPercent(percent)
+	if math.Abs(clamped-math.Round(clamped)) < 0.05 {
+		return strconv.Itoa(int(math.Round(clamped)))
+	}
+	return fmt.Sprintf("%.1f", clamped)
 }
 
 // subtitleCodecFromPath 根据字幕文件扩展名推断 ffmpeg 使用的 codec 名称。
@@ -89,6 +136,34 @@ func isASSLikeTextSubtitleCodec(codec string) bool {
 	default:
 		return false
 	}
+}
+
+// isSupportedTextSubtitleCodec 会判断当前文字字幕 codec 是否在服务端允许范围内。
+func isSupportedTextSubtitleCodec(codec string) bool {
+	switch strings.ToLower(strings.TrimSpace(codec)) {
+	case "ass", "ssa", "subrip", "srt":
+		return true
+	default:
+		return false
+	}
+}
+
+// isKnownTextSubtitleExtension 会判断文件扩展名是否属于当前识别范围内的文本字幕格式。
+func isKnownTextSubtitleExtension(ext string) bool {
+	switch strings.ToLower(strings.TrimSpace(ext)) {
+	case ".ass", ".ssa", ".srt", ".vtt", ".webvtt", ".ttml", ".dfxp", ".smi", ".sami", ".stl", ".sbv", ".lrc":
+		return true
+	default:
+		return false
+	}
+}
+
+// isSupportedTextSubtitlePath 会判断外挂文本字幕文件是否在当前允许范围内。
+func isSupportedTextSubtitlePath(path string) bool {
+	if !isKnownTextSubtitleExtension(filepath.Ext(path)) {
+		return false
+	}
+	return isSupportedTextSubtitleCodec(subtitleCodecFromPath(path))
 }
 
 // parseRequestedTimestamps 把请求里的 HH:MM:SS 时间点列表转换为秒数切片。
@@ -269,8 +344,8 @@ func bitmapCandidateKey(value float64) string {
 
 // clampJPGQScale 将 JPG qscale 限制在 ffmpeg 可接受的范围内。
 func clampJPGQScale(value int) int {
-	if value < 2 {
-		return 2
+	if value < 1 {
+		return 1
 	}
 	if value > 31 {
 		return 31

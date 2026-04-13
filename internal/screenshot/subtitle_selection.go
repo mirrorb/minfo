@@ -15,30 +15,35 @@ import (
 )
 
 // chooseSubtitle 会在当前截图上下文中确定最终使用的字幕来源，并把结果写回运行器状态。
-func (r *screenshotRunner) chooseSubtitle() {
+func (r *screenshotRunner) chooseSubtitle() error {
 	r.subtitle = subtitleSelection{Mode: "none", RelativeIndex: -1, StreamIndex: -1}
 
 	if r.subtitleMode == SubtitleModeOff {
 		r.logf("[信息] 已禁用字幕挂载与字幕对齐，将直接按时间点截图。")
-		return
+		return nil
 	}
 
-	if selection, ok := r.findExternalSubtitle(); ok {
+	if selection, ok, err := r.findExternalSubtitle(); err != nil {
+		return err
+	} else if ok {
 		r.subtitle = selection
 		r.logSubtitleFallback("外挂")
-		return
+		return nil
 	}
 
-	if selection, ok := r.pickInternalSubtitle(); ok {
+	if selection, ok, err := r.pickInternalSubtitle(); err != nil {
+		return err
+	} else if ok {
 		r.subtitle = selection
 		r.logSubtitleFallback("内挂")
-		return
+		return nil
 	}
 
 	r.logf("[提示] 未找到可用字幕，将仅截图视频画面。")
+	return nil
 }
 
-// prepareTextSubtitleRenderSource 会把需要兼容处理的内封文字字幕提取成临时 SRT 文件，复用 shell 的稳定渲染路径。
+// prepareTextSubtitleRenderSource 会为内挂文字字幕准备更稳定的渲染来源。
 func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
 	if r.subtitle.Mode != "internal" {
 		return nil
@@ -46,12 +51,18 @@ func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
 	if r.isSupportedBitmapSubtitle() {
 		return nil
 	}
-	if isASSLikeTextSubtitleCodec(r.subtitle.Codec) {
-		r.logf("[信息] 内挂 ASS/SSA 字幕将直接使用原始字幕流，保留原样式与字号。")
+	if !isSupportedTextSubtitleCodec(r.subtitle.Codec) {
+		return fmt.Errorf("unsupported text subtitle codec: %s", subtitleFormatLabel(r.subtitle.Codec))
+	}
+	if !r.shouldExtractInternalTextSubtitle() {
 		return nil
 	}
 
-	tempFile, err := os.CreateTemp("", "minfo-sub-*.srt")
+	pattern, extractionArgs, extractedCodec, logMessage := internalTextSubtitleExtractionPlan(r.subtitle.Codec)
+	r.logProgress("字幕", 3, 3, "正在提取内挂文字字幕。")
+	r.logf("%s", logMessage)
+
+	tempFile, err := os.CreateTemp("", pattern)
 	if err != nil {
 		return err
 	}
@@ -61,17 +72,15 @@ func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
 		return closeErr
 	}
 
-	stdout, stderr, err := system.RunCommand(r.ctx, r.ffmpegBin,
+	stdout, stderr, err := r.runFFmpegSubtitleExtract([]string{
 		"-v", "error",
 		"-i", r.sourcePath,
 		"-map", fmt.Sprintf("0:s:%d", r.subtitle.RelativeIndex),
-		"-c:s", "srt",
-		"-f", "srt",
+		"-c:s", extractionArgs,
 		"-y", tempPath,
-	)
+	})
 	if err != nil {
 		_ = os.Remove(tempPath)
-		r.logf("[警告] 提取内挂文本字幕失败，将继续直接使用内挂字幕流。")
 		if message := strings.TrimSpace(system.BestErrorMessage(err, stderr, stdout)); message != "" {
 			normalized := strings.ReplaceAll(message, "\r\n", "\n")
 			normalized = strings.ReplaceAll(normalized, "\r", "\n")
@@ -79,16 +88,16 @@ func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
 				if strings.TrimSpace(line) == "" {
 					continue
 				}
-				r.logf("[警告] 提取失败详情: %s", line)
+				r.logf("[错误] 提取失败详情: %s", line)
 			}
 		}
-		return nil
+		return fmt.Errorf("failed to extract internal text subtitle: %w", err)
 	}
 
 	r.tempSubtitleFile = tempPath
 	r.subtitle.Mode = "external"
 	r.subtitle.File = tempPath
-	r.subtitle.Codec = "subrip"
+	r.subtitle.Codec = extractedCodec
 	r.subtitle.StreamIndex = -1
 	r.subtitle.RelativeIndex = -1
 	r.subtitle.ExtractedText = true
@@ -96,13 +105,37 @@ func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
 	return nil
 }
 
+func (r *screenshotRunner) shouldExtractInternalTextSubtitle() bool {
+	if r == nil {
+		return false
+	}
+	if r.subtitle.Mode != "internal" {
+		return false
+	}
+	if r.isSupportedBitmapSubtitle() {
+		return false
+	}
+	return true
+}
+
+func internalTextSubtitleExtractionPlan(codec string) (pattern string, extractionCodecArg string, extractedCodec string, logMessage string) {
+	switch strings.ToLower(strings.TrimSpace(codec)) {
+	case "ass":
+		return "minfo-sub-*.ass", "copy", "ass", "[信息] 内挂 ASS 字幕将提取为原始 ASS 文件，保留样式后参与截图渲染。"
+	case "ssa":
+		return "minfo-sub-*.ssa", "copy", "ssa", "[信息] 内挂 SSA 字幕将提取为原始 SSA 文件，保留样式后参与截图渲染。"
+	default:
+		return "minfo-sub-*.srt", "srt", "subrip", "[信息] 内挂文字字幕将先提取为临时字幕文件，再参与截图渲染。"
+	}
+}
+
 // findExternalSubtitle 会在视频附近查找语言优先级最高的外挂字幕文件。
-func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
+func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool, error) {
 	dir := filepath.Dir(r.sourcePath)
 	base := strings.TrimSuffix(filepath.Base(r.sourcePath), filepath.Ext(r.sourcePath))
 
 	candidates := make([]string, 0)
-	for _, ext := range []string{"ass", "ssa", "srt"} {
+	for _, ext := range []string{"ass", "ssa", "srt", "vtt", "webvtt", "ttml", "dfxp", "smi", "sami", "stl", "sbv", "lrc"} {
 		for _, token := range append(append(append([]string{}, langZHHansTokens...), langZHHantTokens...), langZHTokens...) {
 			candidates = append(candidates,
 				filepath.Join(dir, base+"."+token+"."+ext),
@@ -129,7 +162,7 @@ func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
 			if !strings.Contains(lowerName, strings.ToLower(base)) {
 				continue
 			}
-			if strings.HasSuffix(lowerName, ".ass") || strings.HasSuffix(lowerName, ".ssa") || strings.HasSuffix(lowerName, ".srt") {
+			if isKnownTextSubtitleExtension(filepath.Ext(lowerName)) {
 				candidates = append(candidates, filepath.Join(dir, entry.Name()))
 			}
 		}
@@ -139,6 +172,7 @@ func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
 	bestLang := ""
 	bestScore := -1
 	seen := map[string]struct{}{}
+	firstUnsupportedPath := ""
 
 	for _, candidate := range candidates {
 		if _, ok := seen[candidate]; ok {
@@ -148,6 +182,14 @@ func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
 
 		info, err := os.Stat(candidate)
 		if err != nil || info.IsDir() {
+			continue
+		}
+
+		codec := subtitleCodecFromPath(candidate)
+		if !isSupportedTextSubtitleCodec(codec) {
+			if firstUnsupportedPath == "" {
+				firstUnsupportedPath = candidate
+			}
 			continue
 		}
 
@@ -164,7 +206,10 @@ func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
 	}
 
 	if bestPath == "" {
-		return subtitleSelection{}, false
+		if firstUnsupportedPath != "" {
+			return subtitleSelection{}, false, fmt.Errorf("unsupported text subtitle codec: %s", subtitleFormatLabel(subtitleCodecFromPath(firstUnsupportedPath)))
+		}
+		return subtitleSelection{}, false, nil
 	}
 
 	r.logf("[信息] 选择外挂字幕：%s （语言：%s，字幕格式：%s）", bestPath, bestLang, subtitleFormatLabel(subtitleCodecFromPath(bestPath)))
@@ -175,11 +220,11 @@ func (r *screenshotRunner) findExternalSubtitle() (subtitleSelection, bool) {
 		Codec:         subtitleCodecFromPath(bestPath),
 		RelativeIndex: -1,
 		StreamIndex:   -1,
-	}, true
+	}, true, nil
 }
 
 // pickInternalSubtitle 会综合语言、默认标记、PID 和原盘补充信息选择最合适的内挂字幕轨。
-func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
+func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool, error) {
 	helperTracks := make([]blurayHelperTrack, 0)
 	helperResult := blurayHelperResult{}
 	blurayTracks := make([]subtitleTrack, 0)
@@ -189,6 +234,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 	currentPlaylist := r.blurayContext.Playlist
 
 	if looksLikeDVDSource(r.dvdProbeSource()) {
+		r.logProgress("字幕", 1, 3, "正在读取 DVD 字幕元数据。")
 		if result, ok := r.probeDVDMediaInfo(); ok {
 			dvdMediaInfoResult = result
 			dvdMediaInfoTracks = result.Tracks
@@ -200,6 +246,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		}
 	}
 
+	r.logProgress("字幕", 1, 3, "正在探测内挂字幕轨。")
 	rawTracks, err := r.probeSubtitleTracks(r.subtitleProbeSource())
 	if err != nil || len(rawTracks) == 0 {
 		if len(dvdMediaInfoTracks) > 0 {
@@ -208,10 +255,11 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 				len(dvdMediaInfoTracks),
 			)
 		}
-		return subtitleSelection{}, false
+		return subtitleSelection{}, false, nil
 	}
 
 	if r.blurayContext.Root != "" && r.blurayContext.Playlist != "" {
+		r.logProgress("字幕", 2, 3, fmt.Sprintf("正在补充蓝光字幕元数据：playlist %s。", r.blurayContext.Playlist))
 		if result, tracks, ok := r.probeBlurayHelper(r.blurayContext.Playlist, ""); ok {
 			helperResult = result
 			helperTracks = tracks
@@ -240,6 +288,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 				r.blurayContext.Clip,
 			)
 			if blurayHelperNeedsFFprobe(rawTracks, helperTracks) {
+				r.logProgress("字幕", 2, 3, fmt.Sprintf("正在用 ffprobe 补充蓝光字幕元数据：playlist %s。", r.blurayContext.Playlist))
 				if result, ok := r.probeBlurayFFprobe(r.blurayContext.Playlist); ok && len(result) == len(rawTracks) && len(result) > 0 {
 					blurayTracks = result
 					blurayMode = "helper+ffprobe"
@@ -252,6 +301,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 				}
 			}
 			if blurayHelperNeedsPayloadScan(rawTracks, helperResult, helperTracks, blurayTracks, blurayMode) {
+				r.logProgress("字幕", 2, 3, fmt.Sprintf("正在补充蓝光字幕 payload 元数据：playlist %s。", r.blurayContext.Playlist))
 				r.logf("[信息] 检测到同语言 PGS 候选，开始补充 payload_bytes 用于热路径密度排序：playlist %s / clip %s",
 					r.blurayContext.Playlist,
 					r.blurayContext.Clip,
@@ -266,6 +316,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		}
 
 		if blurayMode == "none" {
+			r.logProgress("字幕", 2, 3, fmt.Sprintf("正在用 ffprobe 探测蓝光字幕：playlist %s。", r.blurayContext.Playlist))
 			if result, ok := r.probeBlurayFFprobe(r.blurayContext.Playlist); ok && len(result) == len(rawTracks) && len(result) > 0 {
 				blurayTracks = result
 				if !tracksHaveClassifiedLang(blurayTracks) {
@@ -297,6 +348,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 	bestLangClass := ""
 	bestRank := preferredSubtitleRank{LangScore: -1, DispositionScore: -1}
 	unsupportedBitmapDetails := make([]string, 0)
+	unsupportedTextDetails := make([]string, 0)
 
 	fallback := subtitleTrack{}
 	fallbackScore := -1
@@ -376,6 +428,10 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 			unsupportedBitmapDetails = append(unsupportedBitmapDetails, fmt.Sprintf("流索引 %d(codec=%s)", track.Index, track.Codec))
 			continue
 		}
+		if !isSupportedTextSubtitleCodec(track.Codec) && bitmapSubtitleKindFromCodec(track.Codec) == bitmapSubtitleNone {
+			unsupportedTextDetails = append(unsupportedTextDetails, fmt.Sprintf("流索引 %d(codec=%s)", track.Index, track.Codec))
+			continue
+		}
 
 		langClass := classifySubtitleLanguage(strings.TrimSpace(langForPick + " " + titleForPick))
 
@@ -419,6 +475,13 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 	if len(unsupportedBitmapDetails) > 0 {
 		r.logf("[提示] 位图字幕目前仅支持 PGS 和 DVD Subtitle，已跳过暂不支持的位图字幕：%s", strings.Join(unsupportedBitmapDetails, ", "))
 	}
+	if len(unsupportedTextDetails) > 0 {
+		r.logf("[提示] 已发现暂不支持的文本字幕类型：%s", strings.Join(unsupportedTextDetails, ", "))
+	}
+
+	if bestRank.LangScore >= 0 && !isSupportedTextSubtitleCodec(best.Codec) && bitmapSubtitleKindFromCodec(best.Codec) == bitmapSubtitleNone {
+		return subtitleSelection{}, false, fmt.Errorf("unsupported text subtitle codec: %s", subtitleFormatLabel(best.Codec))
+	}
 
 	if bestRank.LangScore < 0 {
 		if fallbackScore >= 0 {
@@ -427,8 +490,10 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		} else if otherScore >= 0 {
 			best = other
 			bestLangClass = "other"
+		} else if len(unsupportedTextDetails) > 0 {
+			return subtitleSelection{}, false, fmt.Errorf("unsupported text subtitle codec, only ASS/SSA/SubRip are supported")
 		} else {
-			return subtitleSelection{}, false
+			return subtitleSelection{}, false, nil
 		}
 	}
 
@@ -464,7 +529,7 @@ func (r *screenshotRunner) pickInternalSubtitle() (subtitleSelection, bool) {
 		Lang:          bestLangClass,
 		Codec:         best.Codec,
 		Title:         best.Title,
-	}, true
+	}, true, nil
 }
 
 // prepareBlurayProbeContext 预先推导蓝光根目录、playlist 和 clip，供后续 bdsub 或 ffprobe 探测复用。
@@ -580,9 +645,11 @@ func (r *screenshotRunner) probeDVDMediaInfo() (dvdMediaInfoResult, bool) {
 		return dvdMediaInfoResult{}, false
 	}
 
-	result, err := probeDVDMediaInfo(r.ctx, r.mediainfoBin, r.dvdSelectedIFOPath(), r.dvdSelectedVOBPath())
-	if err != nil {
-		r.logf("[提示] mediainfo(DVD) 失败：%s", err.Error())
+	result, ok, err := r.ensureDVDMediaInfoResult()
+	if !ok {
+		if err != nil {
+			r.logf("[提示] mediainfo(DVD) 失败：%s", err.Error())
+		}
 		return dvdMediaInfoResult{}, false
 	}
 	if len(result.Tracks) == 0 {

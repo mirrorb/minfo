@@ -290,6 +290,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             hidePanels();
             showNotice(resolveTaskErrorMessage(err, `${label} 任务已失效，请重新发起。`));
         } finally {
+            clearTaskProgress();
             setBusy(false);
         }
     };
@@ -348,6 +349,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             hidePanels();
             showNotice(resolveTaskErrorMessage(err, "截图任务已失效，请重新发起。"));
         } finally {
+            clearTaskProgress();
             setBusy(false);
         }
     };
@@ -404,6 +406,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             hidePanels();
             showNotice(resolveTaskErrorMessage(err, "图床任务已失效，请重新发起。"));
         } finally {
+            clearTaskProgress();
             setBusy(false);
         }
     };

@@ -186,11 +186,11 @@ func (r *screenshotRunner) detectColorspace() string {
 func buildColorspaceChain(info string) string {
 	switch {
 	case strings.Contains(info, "bt2020") && (strings.Contains(info, "smpte2084") || strings.Contains(info, "arib-std-b67")):
-		return "format=yuv420p10le,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709:t=bt709,tonemap=hable:desat=0,format=rgb24"
+		return "format=yuv420p10le,zscale=t=linear:npl=203,format=gbrpf32le,tonemap=mobius:param=0.3:desat=2.0,zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
 	case strings.Contains(info, "bt2020"):
-		return "format=rgb24,scale=in_color_matrix=bt2020:out_color_matrix=bt709"
+		return "zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
 	default:
-		return "format=rgb24"
+		return ""
 	}
 }
 
@@ -200,6 +200,137 @@ func buildDisplayAspectFilter() string {
 	// Still-image formats do not reliably preserve SAR, so we expand to
 	// square pixels before writing PNG/JPG.
 	return "scale='trunc(iw*sar/2)*2:ih',setsar=1"
+}
+
+// detectDisplayAspectFilter 读取视频流的 SAR/DAR 元数据，并构建更适合静态截图的比例修正过滤器。
+func (r *screenshotRunner) detectDisplayAspectFilter() string {
+	stdout, _, err := system.RunCommand(r.ctx, r.ffprobeBin,
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=width,height,sample_aspect_ratio,display_aspect_ratio",
+		"-of", "default=noprint_wrappers=1",
+		r.sourcePath,
+	)
+	if err != nil {
+		return buildDisplayAspectFilter()
+	}
+
+	width := 0
+	height := 0
+	sar := ""
+	dar := ""
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "width="):
+			width, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "width=")))
+		case strings.HasPrefix(line, "height="):
+			height, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "height=")))
+		case strings.HasPrefix(line, "sample_aspect_ratio="):
+			sar = strings.TrimSpace(strings.TrimPrefix(line, "sample_aspect_ratio="))
+		case strings.HasPrefix(line, "display_aspect_ratio="):
+			dar = strings.TrimSpace(strings.TrimPrefix(line, "display_aspect_ratio="))
+		}
+	}
+
+	if looksLikeDVDSource(r.dvdProbeSource()) {
+		mediainfoDAR := ""
+		if r.hasDVDMediaInfoResult {
+			mediainfoDAR = strings.TrimSpace(r.dvdMediaInfoResult.DisplayAspectRatio)
+		}
+		r.logf("[信息] DVD 比例探测：ffprobe width=%d height=%d sar=%s dar=%s | mediainfo dar=%s",
+			width,
+			height,
+			displayProbeValue(sar),
+			displayProbeValue(dar),
+			displayProbeValue(mediainfoDAR),
+		)
+		if width2, height2, filter, ok := r.detectDVDDisplayAspectFilterFromMediaInfo(width, height); ok {
+			r.logf("[信息] DVD 比例修正将直接使用 mediainfo DAR：%s", filter)
+			return buildDisplayAspectFilterForMetadata(width2, height2, "", filter)
+		}
+		r.logf("[提示] mediainfo 未提供可用 DVD 比例，回退 ffprobe SAR/DAR。")
+	}
+
+	return buildDisplayAspectFilterForMetadata(width, height, sar, dar)
+}
+
+func (r *screenshotRunner) detectDVDDisplayAspectFilterFromMediaInfo(width, height int) (int, int, string, bool) {
+	if r == nil || !r.hasDVDMediaInfoResult {
+		return 0, 0, "", false
+	}
+	if !looksLikeDVDSource(r.dvdProbeSource()) {
+		return 0, 0, "", false
+	}
+	if width <= 0 || height <= 0 {
+		return 0, 0, "", false
+	}
+	if strings.TrimSpace(r.dvdMediaInfoResult.DisplayAspectRatio) == "" {
+		return 0, 0, "", false
+	}
+	return width, height, r.dvdMediaInfoResult.DisplayAspectRatio, true
+}
+
+// buildDisplayAspectFilterForMetadata 根据视频宽高和宽高比元数据生成静态截图所需的比例修正链。
+func buildDisplayAspectFilterForMetadata(width, height int, sar, dar string) string {
+	if width > 0 && height > 0 {
+		normalizedDAR := normalizeMediaInfoAspectRatio(dar)
+		if darNum, darDen, ok := parseAspectRatio(normalizedDAR); ok {
+			rawAspect := float64(width) / float64(height)
+			displayAspect := float64(darNum) / float64(darDen)
+			if math.Abs(displayAspect-rawAspect) > 0.02 {
+				return fmt.Sprintf("scale='trunc(ih*%d/%d/2)*2:ih',setsar=1", darNum, darDen)
+			}
+		} else if displayAspect, ok := parseAspectRatioValue(normalizedDAR); ok {
+			rawAspect := float64(width) / float64(height)
+			if math.Abs(displayAspect-rawAspect) > 0.02 {
+				return fmt.Sprintf("scale='trunc(ih*%.6f/2)*2:ih',setsar=1", displayAspect)
+			}
+		}
+	}
+
+	if sarNum, sarDen, ok := parseAspectRatio(sar); ok {
+		if sarNum == sarDen {
+			return "setsar=1"
+		}
+	}
+	return buildDisplayAspectFilter()
+}
+
+func parseAspectRatio(raw string) (int, int, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" || value == "N/A" || value == "0:1" {
+		return 0, 0, false
+	}
+
+	parts := strings.Split(value, ":")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+
+	num, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	den, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err1 != nil || err2 != nil || num <= 0 || den <= 0 {
+		return 0, 0, false
+	}
+	return num, den, true
+}
+
+func parseAspectRatioValue(raw string) (float64, bool) {
+	if num, den, ok := parseAspectRatio(raw); ok {
+		return float64(num) / float64(den), true
+	}
+
+	value := strings.TrimSpace(strings.ReplaceAll(raw, ",", "."))
+	if value == "" || value == "N/A" {
+		return 0, false
+	}
+
+	ratio, err := strconv.ParseFloat(value, 64)
+	if err != nil || ratio <= 0 {
+		return 0, false
+	}
+	return ratio, true
 }
 
 // joinFilters 连接多个非空 ffmpeg 过滤器片段。

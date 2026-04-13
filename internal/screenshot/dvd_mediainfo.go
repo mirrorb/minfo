@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,6 +28,7 @@ type dvdMediaInfoTrack struct {
 
 type dvdMediaInfoResult struct {
 	Duration             float64
+	DisplayAspectRatio   string
 	Tracks               []dvdMediaInfoTrack
 	ProbePath            string
 	SelectedVOBPath      string
@@ -73,6 +75,27 @@ func probeDVDMediaInfo(ctx context.Context, mediainfoBin, path, probePath string
 	return result, nil
 }
 
+// ensureDVDMediaInfoResult 在 DVD 场景下只探测一次 mediainfo 结果，并缓存供后续字幕与比例逻辑复用。
+func (r *screenshotRunner) ensureDVDMediaInfoResult() (dvdMediaInfoResult, bool, error) {
+	if r == nil || strings.TrimSpace(r.mediainfoBin) == "" {
+		return dvdMediaInfoResult{}, false, nil
+	}
+	if !looksLikeDVDSource(r.dvdProbeSource()) {
+		return dvdMediaInfoResult{}, false, nil
+	}
+	if r.hasDVDMediaInfoResult {
+		return r.dvdMediaInfoResult, true, nil
+	}
+
+	result, err := probeDVDMediaInfo(r.ctx, r.mediainfoBin, r.dvdSelectedIFOPath(), r.dvdSelectedVOBPath())
+	if err != nil {
+		return dvdMediaInfoResult{}, false, err
+	}
+	r.dvdMediaInfoResult = result
+	r.hasDVDMediaInfoResult = true
+	return result, true, nil
+}
+
 // probeDVDMediaInfoOnce 运行一次 mediainfo JSON 探测，并解析出字幕轨和时长信息。
 func probeDVDMediaInfoOnce(ctx context.Context, mediainfoBin, path string) (dvdMediaInfoResult, error) {
 	stdout, stderr, err := system.RunCommand(ctx, mediainfoBin, "--Output=JSON", path)
@@ -99,6 +122,19 @@ func probeDVDMediaInfoOnce(ctx context.Context, mediainfoBin, path string) (dvdM
 			case "general":
 				if value, ok := parseMediaInfoTrackDuration(mediaInfoTrackString(track, "Duration")); ok && value > 0 && value > result.Duration {
 					result.Duration = value
+				}
+				if result.DisplayAspectRatio == "" {
+					result.DisplayAspectRatio = normalizeMediaInfoAspectRatio(mediaInfoTrackString(track,
+						"DisplayAspectRatio",
+						"DisplayAspectRatio/String",
+					))
+				}
+			case "video":
+				if result.DisplayAspectRatio == "" {
+					result.DisplayAspectRatio = normalizeMediaInfoAspectRatio(mediaInfoTrackString(track,
+						"DisplayAspectRatio",
+						"DisplayAspectRatio/String",
+					))
 				}
 			case "text":
 				streamID, _ := parseMediaInfoStreamID(mediaInfoTrackString(track, "ID"))
@@ -411,6 +447,43 @@ func parseMediaInfoTrackDuration(raw string) (float64, bool) {
 		return 0, false
 	}
 	return parsed / 1000.0, true
+}
+
+// normalizeMediaInfoAspectRatio 把 mediainfo 的显示宽高比统一转换成更稳定的 ratio 字符串。
+func normalizeMediaInfoAspectRatio(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, ":") {
+		return value
+	}
+	if strings.Contains(value, "/") {
+		return strings.ReplaceAll(value, "/", ":")
+	}
+
+	ratio, err := strconv.ParseFloat(strings.ReplaceAll(value, ",", "."), 64)
+	if err != nil || ratio <= 0 {
+		return value
+	}
+
+	for _, candidate := range []struct {
+		num int
+		den int
+	}{
+		{num: 4, den: 3},
+		{num: 16, den: 9},
+		{num: 185, den: 100},
+		{num: 239, den: 100},
+		{num: 235, den: 100},
+	} {
+		target := float64(candidate.num) / float64(candidate.den)
+		if math.Abs(ratio-target) <= 0.01 {
+			return fmt.Sprintf("%d:%d", candidate.num, candidate.den)
+		}
+	}
+
+	return value
 }
 
 // resolveDVDMediaInfoTracks 将 MediaInfo 的 DVD 字幕轨尽量映射回 ffprobe 的原始字幕 PID。
