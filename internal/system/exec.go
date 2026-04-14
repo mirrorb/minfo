@@ -17,6 +17,8 @@ const (
 	FFmpegBinaryPath    = "/usr/bin/ffmpeg"
 	FFprobeBinaryPath   = "/usr/bin/ffprobe"
 	MediaInfoBinaryPath = "/usr/bin/mediainfo"
+	OxiPNGBinaryPath    = "/usr/bin/oxipng"
+	PNGQuantBinaryPath  = "/usr/bin/pngquant"
 	BDInfoBinaryPath    = "/usr/local/bin/bdinfo"
 	BDSubBinaryPath     = "/usr/local/bin/bdsub"
 	MountBinaryPath     = "/bin/mount"

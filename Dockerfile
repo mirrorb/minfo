@@ -92,23 +92,16 @@ RUN set -eux; \
     printf '%s\n%s\n' "${ALPINE_EDGE_REPO}/main" "${ALPINE_EDGE_REPO}/community" > /etc/apk/repositories; \
     apk add --no-cache \
         ca-certificates \
-        curl \
         "$FFMPEG_PKG" \
         mediainfo \
         fontconfig \
         font-noto-cjk \
         kmod \
         libgdiplus \
-        findutils \
+        oxipng \
+        pngquant \
         util-linux \
-        libstdc++ \
-        libgcc \
-        tzdata \
-        bash \
-        jq \
-        bc \
-        file \
-        coreutils; \
+        tzdata; \
     printf '#!/bin/sh\nexec "$@"\n' > /usr/local/bin/sudo; \
     chmod +x /usr/local/bin/sudo
 
@@ -134,23 +127,16 @@ RUN set -eux; \
     printf '%s\n%s\n' "${ALPINE_EDGE_REPO}/main" "${ALPINE_EDGE_REPO}/community" > /etc/apk/repositories; \
     apk add --no-cache \
         ca-certificates \
-        curl \
         "$FFMPEG_PKG" \
         mediainfo \
         fontconfig \
         font-noto-cjk \
         kmod \
         libgdiplus \
-        findutils \
+        oxipng \
+        pngquant \
         util-linux \
-        libstdc++ \
-        libgcc \
-        tzdata \
-        bash \
-        jq \
-        bc \
-        file \
-        coreutils
+        tzdata
 RUN GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest
 
 COPY --from=runtime /usr/local/bin/bdinfo /usr/local/bin/bdinfo

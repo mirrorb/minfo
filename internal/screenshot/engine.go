@@ -153,9 +153,12 @@ type screenshotRunner struct {
 	ffmpegBin        string
 	ffprobeBin       string
 	mediainfoBin     string
+	oxipngBin        string
+	pngquantBin      string
 	bdsubBin         string
 	logLines         []string
 	logHandler       LogHandler
+	lossyPNGFiles    map[string]struct{}
 
 	blurayContext            blurayProbeContext
 	subtitle                 subtitleSelection
@@ -215,7 +218,8 @@ func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath,
 		subtitle: subtitleSelection{
 			Mode: "none",
 		},
-		logHandler: onLog,
+		logHandler:    onLog,
+		lossyPNGFiles: make(map[string]struct{}),
 	}
 	defer runner.cleanupTemporarySubtitleFile()
 
@@ -235,7 +239,11 @@ func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath,
 	if err != nil {
 		return ScreenshotsResult{Logs: runner.logs()}, err
 	}
-	return ScreenshotsResult{Files: files, Logs: runner.logs()}, nil
+	return ScreenshotsResult{
+		Files:          files,
+		Logs:           runner.logs(),
+		LossyPNGFiles:  runner.lossyPNGFileList(),
+	}, nil
 }
 
 // variantSettingsFor 会根据输出格式选择对应的探测、搜索和编码参数。
@@ -280,6 +288,12 @@ func (r *screenshotRunner) init(timestamps []string) error {
 	}
 	if bin, binErr := system.ResolveBin(system.MediaInfoBinaryPath); binErr == nil {
 		r.mediainfoBin = bin
+	}
+	if bin, binErr := system.ResolveBin(system.OxiPNGBinaryPath); binErr == nil {
+		r.oxipngBin = bin
+	}
+	if bin, binErr := system.ResolveBin(system.PNGQuantBinaryPath); binErr == nil {
+		r.pngquantBin = bin
 	}
 	if bin, binErr := system.ResolveBin(system.BDSubBinaryPath); binErr == nil {
 		r.bdsubBin = bin

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"minfo/internal/config"
-	"minfo/internal/httpapi/logstream"
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/screenshot"
 )
@@ -38,24 +37,26 @@ var screenshotJobs = struct {
 }
 
 type screenshotJob struct {
-	mu           sync.RWMutex
-	id           string
-	mode         string
-	inputPath    string
-	variant      string
-	subtitleMode string
-	count        int
-	status       string
-	output       string
-	downloadURL  string
-	errMessage   string
-	createdAt    time.Time
-	updatedAt    time.Time
-	completedAt  time.Time
-	logger       *infoLogger
-	cleanup      func()
-	taskContext  context.Context
-	cancel       context.CancelFunc
+	mu              sync.RWMutex
+	id              string
+	mode            string
+	inputPath       string
+	variant         string
+	subtitleMode    string
+	count           int
+	status          string
+	output          string
+	downloadURL     string
+	pngLossyFiles   []string
+	pngLossyIndexes []int
+	errMessage      string
+	createdAt       time.Time
+	updatedAt       time.Time
+	completedAt     time.Time
+	logger          *infoLogger
+	cleanup         func()
+	taskContext     context.Context
+	cancel          context.CancelFunc
 
 	cancelRequested bool
 }
@@ -168,7 +169,7 @@ func createScreenshotJob(mode, inputPath string, cleanup func(), variant, subtit
 		status:       screenshotJobStatusPending,
 		createdAt:    now,
 		updatedAt:    now,
-		logger:       newInfoLogger(logstream.Open(jobID)),
+		logger:       newInfoLogger(),
 		cleanup:      cleanup,
 		taskContext:  taskContext,
 		cancel:       cancel,
@@ -247,14 +248,14 @@ func (j *screenshotJob) run() {
 			j.fail(err)
 			return
 		}
-		j.succeed(result.Output, "")
+		j.succeed(result.Output, "", result.LossyPNGFiles, result.LossyPNGIndexes)
 	default:
 		downloadURL, _, err := prepareScreenshotZipDownload(ctx, j.inputPath, tempDir, j.variant, j.subtitleMode, j.count, j.logger.LogLine)
 		if err != nil {
 			j.fail(err)
 			return
 		}
-		j.succeed("", downloadURL)
+		j.succeed("", downloadURL, nil, nil)
 	}
 }
 
@@ -263,13 +264,15 @@ func (j *screenshotJob) snapshot() transport.ScreenshotJobResponse {
 	j.mu.RLock()
 	count := j.count
 	response := transport.ScreenshotJobResponse{
-		OK:          true,
-		JobID:       j.id,
-		Status:      j.status,
-		Mode:        j.mode,
-		Output:      j.output,
-		DownloadURL: j.downloadURL,
-		Error:       j.errMessage,
+		OK:              true,
+		JobID:           j.id,
+		Status:          j.status,
+		Mode:            j.mode,
+		Output:          j.output,
+		DownloadURL:     j.downloadURL,
+		Error:           j.errMessage,
+		PNGLossyFiles:   append([]string(nil), j.pngLossyFiles...),
+		PNGLossyIndexes: append([]int(nil), j.pngLossyIndexes...),
 	}
 	logger := j.logger
 	j.mu.RUnlock()
@@ -339,7 +342,7 @@ func (j *screenshotJob) requestCancel() {
 }
 
 // succeed 会记录后台任务成功产出的最终结果。
-func (j *screenshotJob) succeed(output, downloadURL string) {
+func (j *screenshotJob) succeed(output, downloadURL string, pngLossyFiles []string, pngLossyIndexes []int) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -348,6 +351,8 @@ func (j *screenshotJob) succeed(output, downloadURL string) {
 		j.status = screenshotJobStatusCanceled
 		j.output = ""
 		j.downloadURL = ""
+		j.pngLossyFiles = nil
+		j.pngLossyIndexes = nil
 		j.errMessage = "任务已取消。"
 		j.updatedAt = now
 		j.completedAt = now
@@ -357,6 +362,8 @@ func (j *screenshotJob) succeed(output, downloadURL string) {
 	j.status = screenshotJobStatusSucceeded
 	j.output = output
 	j.downloadURL = downloadURL
+	j.pngLossyFiles = append([]string(nil), pngLossyFiles...)
+	j.pngLossyIndexes = append([]int(nil), pngLossyIndexes...)
 	j.errMessage = ""
 	j.updatedAt = now
 	j.completedAt = now
@@ -372,6 +379,8 @@ func (j *screenshotJob) fail(err error) {
 		j.status = screenshotJobStatusCanceled
 		j.output = ""
 		j.downloadURL = ""
+		j.pngLossyFiles = nil
+		j.pngLossyIndexes = nil
 		j.errMessage = "任务已取消。"
 		j.updatedAt = now
 		j.completedAt = now
@@ -381,6 +390,8 @@ func (j *screenshotJob) fail(err error) {
 	j.status = screenshotJobStatusFailed
 	j.output = ""
 	j.downloadURL = ""
+	j.pngLossyFiles = nil
+	j.pngLossyIndexes = nil
 	if err != nil {
 		j.errMessage = err.Error()
 	} else {
@@ -403,6 +414,8 @@ func (j *screenshotJob) finishCanceled() {
 	j.status = screenshotJobStatusCanceled
 	j.output = ""
 	j.downloadURL = ""
+	j.pngLossyFiles = nil
+	j.pngLossyIndexes = nil
 	j.errMessage = "任务已取消。"
 	j.updatedAt = now
 	j.completedAt = now

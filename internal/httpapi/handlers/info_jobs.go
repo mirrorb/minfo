@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"minfo/internal/config"
-	"minfo/internal/httpapi/logstream"
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/system"
 )
@@ -166,7 +165,7 @@ func createInfoJob(kind, inputPath string, cleanup func(), bdinfoMode string) (*
 		status:      infoJobStatusPending,
 		createdAt:   now,
 		updatedAt:   now,
-		logger:      newInfoLogger(logstream.Open(jobID)),
+		logger:      newInfoLogger(),
 		cleanup:     cleanup,
 		taskContext: taskContext,
 		cancel:      cancel,

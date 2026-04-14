@@ -43,14 +43,18 @@ const (
 
 // ScreenshotsResult 表示一次截图流程返回的文件列表和日志。
 type ScreenshotsResult struct {
-	Files []string
-	Logs  string
+	Files           []string
+	Logs            string
+	LossyPNGFiles   []string
+	LossyPNGIndexes []int
 }
 
 // UploadResult 表示一次截图上传流程返回的直链文本和日志。
 type UploadResult struct {
-	Output string
-	Logs   string
+	Output          string
+	Logs            string
+	LossyPNGFiles   []string
+	LossyPNGIndexes []int
 }
 
 // LogHandler 处理截图流程产生的单行实时日志。

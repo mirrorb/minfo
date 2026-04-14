@@ -14,7 +14,6 @@ import (
 
 	"minfo/internal/bdinfo"
 	"minfo/internal/config"
-	"minfo/internal/httpapi/logstream"
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/media"
 	"minfo/internal/system"
@@ -32,7 +31,7 @@ func MediaInfoHandler() http.HandlerFunc {
 		}
 		defer transport.CleanupMultipart(r)
 
-		logger := newInfoLogger(logstream.Open(r.FormValue("log_session")))
+		logger := newInfoLogger()
 		defer logger.Close()
 
 		path, cleanup, err := transport.InputPath(r)
@@ -81,7 +80,7 @@ func BDInfoHandler() http.HandlerFunc {
 		}
 		defer transport.CleanupMultipart(r)
 
-		logger := newInfoLogger(logstream.Open(r.FormValue("log_session")))
+		logger := newInfoLogger()
 		defer logger.Close()
 
 		path, cleanup, err := transport.InputPath(r)
@@ -179,9 +178,8 @@ func runBDInfo(ctx context.Context, path, mode string, logger *infoLogger) (stri
 }
 
 type infoLogger struct {
-	mu      sync.Mutex
-	session *logstream.Session
-	lines   []timedLogLine
+	mu    sync.Mutex
+	lines []timedLogLine
 }
 
 type timedLogLine struct {
@@ -190,14 +188,13 @@ type timedLogLine struct {
 }
 
 // newInfoLogger 会创建一个带时间戳缓存的请求日志记录器。
-func newInfoLogger(session *logstream.Session) *infoLogger {
+func newInfoLogger() *infoLogger {
 	return &infoLogger{
-		session: session,
-		lines:   make([]timedLogLine, 0, 32),
+		lines: make([]timedLogLine, 0, 32),
 	}
 }
 
-// Logf 会记录格式化日志，并在存在实时会话时同步推送给前端。
+// Logf 会记录格式化日志。
 func (l *infoLogger) Logf(format string, args ...any) {
 	if l == nil {
 		return
@@ -210,9 +207,6 @@ func (l *infoLogger) Logf(format string, args ...any) {
 		message:   line,
 	})
 	l.mu.Unlock()
-	if l.session != nil {
-		l.session.PublishAt(now, line)
-	}
 }
 
 // LogLine 会按原样记录单行日志。
@@ -294,12 +288,8 @@ func (l *infoLogger) Entries() []transport.LogEntry {
 	return entries
 }
 
-// Close 会关闭当前日志会话，通知订阅端后续不再推送新内容。
+// Close 会释放当前日志记录器持有的资源。
 func (l *infoLogger) Close() {
-	if l == nil || l.session == nil {
-		return
-	}
-	l.session.Close()
 }
 
 // writeInfoError 会把统一格式的错误响应连同当前日志一起写回客户端。

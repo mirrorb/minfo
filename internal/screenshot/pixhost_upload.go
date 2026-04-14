@@ -37,34 +37,55 @@ func runPixhostUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, var
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
 
-	output, uploadLogs, err := uploadImagesToPixhost(ctx, screenshotResult.Files, onLog)
+	output, uploadLogs, lossyIndexes, err := uploadImagesToPixhost(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, onLog)
 	logs := strings.TrimSpace(strings.Join(filterNonEmptyStrings(screenshotResult.Logs, uploadLogs), "\n\n"))
 	if err != nil {
-		return UploadResult{Logs: logs}, err
+		return UploadResult{
+			Logs:            logs,
+			LossyPNGFiles:   screenshotResult.LossyPNGFiles,
+			LossyPNGIndexes: lossyIndexes,
+		}, err
 	}
-	return UploadResult{Output: output, Logs: logs}, nil
+	return UploadResult{
+		Output:          output,
+		Logs:            logs,
+		LossyPNGFiles:   screenshotResult.LossyPNGFiles,
+		LossyPNGIndexes: lossyIndexes,
+	}, nil
 }
 
 // uploadImagesToPixhost 过滤可上传图片，逐个上传到 Pixhost，并返回整理后的直链文本和日志。
-func uploadImagesToPixhost(ctx context.Context, files []string, onLog LogHandler) (string, string, error) {
+func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLog LogHandler) (string, string, []int, error) {
 	logLines := make([]string, 0)
 	images := collectUploadableImages(files)
 	if len(images) == 0 {
 		logLines = appendUploadLogLine(logLines, onLog, "警告: 未找到有效图片文件")
-		return "", strings.Join(logLines, "\n"), errors.New("no uploadable screenshots were found")
+		return "", strings.Join(logLines, "\n"), nil, errors.New("no uploadable screenshots were found")
 	}
 
 	logLines = appendUploadLogLine(logLines, onLog, "开始处理 %d 个文件...", len(images))
 	client := &http.Client{}
 	apiURL := config.Getenv("PIXHOST_API_URL", pixhostAPIURL)
+	lossySet := make(map[string]struct{}, len(lossyFiles))
+	for _, name := range lossyFiles {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		lossySet[name] = struct{}{}
+	}
 
 	links := make([]string, 0, len(images))
+	lossyIndexes := make([]int, 0, len(lossySet))
 	successCount := 0
 	for _, imagePath := range images {
 		directURL, err := uploadSinglePixhostImage(ctx, client, apiURL, imagePath)
 		if err != nil {
 			logLines = appendUploadLogLine(logLines, onLog, "上传失败: %s (%s)", filepath.Base(imagePath), err.Error())
 			continue
+		}
+		if _, ok := lossySet[filepath.Base(imagePath)]; ok {
+			lossyIndexes = append(lossyIndexes, len(links))
 		}
 		successCount++
 		links = append(links, directURL)
@@ -75,9 +96,9 @@ func uploadImagesToPixhost(ctx context.Context, files []string, onLog LogHandler
 	logLines = appendUploadLogLine(logLines, onLog, "处理完成! 成功: %d/%d", successCount, len(images))
 
 	if len(links) == 0 {
-		return "", strings.Join(logLines, "\n"), errors.New("pixhost upload completed but returned no links")
+		return "", strings.Join(logLines, "\n"), lossyIndexes, errors.New("pixhost upload completed but returned no links")
 	}
-	return strings.Join(extractDirectLinks(strings.Join(links, "\n")), "\n"), strings.Join(logLines, "\n"), nil
+	return strings.Join(extractDirectLinks(strings.Join(links, "\n")), "\n"), strings.Join(logLines, "\n"), lossyIndexes, nil
 }
 
 // appendUploadLogLine 追加一条上传日志；若提供实时回调则同步推送。

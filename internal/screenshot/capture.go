@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,8 +33,8 @@ func (r *screenshotRunner) captureScreenshot(aligned float64, path string) error
 
 	sizeMB := float64(info.Size()) / 1024.0 / 1024.0
 	if r.variant != VariantJPG {
-		r.logf("[提示] %s 大小 %.2fMB，直接使用调色板 PNG 压缩...", filepath.Base(path), sizeMB)
-		r.compressOversizedPNGIfNeeded(path, path)
+		r.logf("[提示] %s 大小 %.2fMB，先使用 oxipng 压缩...", filepath.Base(path), sizeMB)
+		r.compressOversizedPNGIfNeeded(path)
 		return nil
 	}
 
@@ -54,40 +55,71 @@ func (r *screenshotRunner) captureScreenshot(aligned float64, path string) error
 	return nil
 }
 
-func (r *screenshotRunner) compressOversizedPNGIfNeeded(tempPath, finalPath string) {
-	info, err := os.Stat(tempPath)
+func (r *screenshotRunner) compressOversizedPNGIfNeeded(path string) {
+	info, err := os.Stat(path)
 	if err != nil || info.Size() <= oversizeBytes {
 		return
 	}
 
-	beforeMB := float64(info.Size()) / 1024.0 / 1024.0
-	r.logf("[提示] %s 重拍后仍为 %.2fMB，继续使用调色板 PNG 压缩...", filepath.Base(finalPath), beforeMB)
-
-	if err := r.compressAggressivePNG(tempPath); err != nil {
-		r.logf("[警告] %s 调色板 PNG 压缩失败，保留当前重拍结果：%s", filepath.Base(finalPath), err.Error())
+	if err := r.compressOxiPNG(path); err != nil {
+		r.logf("[警告] %s oxipng 压缩失败，保留当前截图：%s", filepath.Base(path), err.Error())
 		return
 	}
 
-	afterInfo, err := os.Stat(tempPath)
+	afterInfo, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	afterMB := float64(afterInfo.Size()) / 1024.0 / 1024.0
+	if afterInfo.Size() <= oversizeBytes {
+		r.logf("[信息] %s 经 oxipng 压缩后大小 %.2fMB。", filepath.Base(path), afterMB)
+		return
+	}
+
+	r.logf("[提示] %s 经 oxipng 压缩后仍为 %.2fMB，继续使用 pngquant 压缩...", filepath.Base(path), afterMB)
+	if err := r.compressPNGQuant(path); err != nil {
+		r.logf("[警告] %s pngquant 压缩失败，保留 oxipng 结果：%s", filepath.Base(path), err.Error())
+		return
+	}
+	r.logf("[警告] %s 已使用 pngquant 有损压缩。若介意画质损失，可切换 JPG 重新生成。", filepath.Base(path))
+
+	finalInfo, err := os.Stat(path)
 	if err != nil {
 		return
 	}
 
-	afterMB := float64(afterInfo.Size()) / 1024.0 / 1024.0
-	if afterInfo.Size() > oversizeBytes {
-		r.logf("[警告] %s 调色板 PNG 压缩后仍为 %.2fMB，图床上传可能跳过该文件。", filepath.Base(finalPath), afterMB)
+	finalMB := float64(finalInfo.Size()) / 1024.0 / 1024.0
+	if finalInfo.Size() <= oversizeBytes {
+		r.logf("[信息] %s 经 oxipng + pngquant 压缩后大小 %.2fMB。", filepath.Base(path), finalMB)
 		return
 	}
 
-	r.logf("[信息] %s 调色板 PNG 压缩后大小 %.2fMB。", filepath.Base(finalPath), afterMB)
+	r.logf("[警告] %s 经 oxipng + pngquant 压缩后仍为 %.2fMB，图床上传可能跳过该文件。", filepath.Base(path), finalMB)
 }
 
-func (r *screenshotRunner) compressAggressivePNG(path string) error {
-	compressedPath := path + ".pal.png"
+func (r *screenshotRunner) compressOxiPNG(path string) error {
+	if strings.TrimSpace(r.oxipngBin) == "" {
+		return fmt.Errorf("%s not found", system.OxiPNGBinaryPath)
+	}
+
+	args := buildOxiPNGCompressionArgs(path)
+	stdout, stderr, err := system.RunCommand(r.ctx, r.oxipngBin, args...)
+	if err != nil {
+		return fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
+	}
+	return nil
+}
+
+func (r *screenshotRunner) compressPNGQuant(path string) error {
+	if strings.TrimSpace(r.pngquantBin) == "" {
+		return fmt.Errorf("%s not found", system.PNGQuantBinaryPath)
+	}
+
+	compressedPath := path + ".quant.png"
 	_ = os.Remove(compressedPath)
 
-	args := buildAggressivePNGCompressionArgs(path, compressedPath)
-	stdout, stderr, err := system.RunCommand(r.ctx, r.ffmpegBin, args...)
+	args := buildPNGQuantCompressionArgs(path, compressedPath)
+	stdout, stderr, err := system.RunCommand(r.ctx, r.pngquantBin, args...)
 	if err != nil {
 		_ = os.Remove(compressedPath)
 		return fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
@@ -97,24 +129,55 @@ func (r *screenshotRunner) compressAggressivePNG(path string) error {
 		_ = os.Remove(compressedPath)
 		return err
 	}
+	r.markLossyPNG(path)
 	return nil
 }
 
-func buildAggressivePNGCompressionArgs(inputPath, outputPath string) []string {
-	filter := "[0:v]split[p][v];[p]palettegen=stats_mode=single:max_colors=256[pal];[v][pal]paletteuse=new=1:dither=sierra2_4a[out]"
+func buildOxiPNGCompressionArgs(path string) []string {
 	return []string{
-		"-v", "error",
-		"-i", inputPath,
-		"-filter_complex", filter,
-		"-map", "[out]",
-		"-frames:v", "1",
-		"-pix_fmt", "pal8",
-		"-c:v", "png",
-		"-compression_level", "9",
-		"-pred", "mixed",
-		"-y",
-		outputPath,
+		"-o", "max",
+		"--strip", "safe",
+		"--quiet",
+		path,
 	}
+}
+
+func buildPNGQuantCompressionArgs(inputPath, outputPath string) []string {
+	return []string{
+		"256",
+		"--force",
+		"--output", outputPath,
+		"--speed", "1",
+		"--strip",
+		"--",
+		inputPath,
+	}
+}
+
+func (r *screenshotRunner) markLossyPNG(path string) {
+	if r == nil {
+		return
+	}
+	if r.lossyPNGFiles == nil {
+		r.lossyPNGFiles = make(map[string]struct{})
+	}
+	name := filepath.Base(strings.TrimSpace(path))
+	if name == "" {
+		return
+	}
+	r.lossyPNGFiles[name] = struct{}{}
+}
+
+func (r *screenshotRunner) lossyPNGFileList() []string {
+	if r == nil || len(r.lossyPNGFiles) == 0 {
+		return nil
+	}
+	files := make([]string, 0, len(r.lossyPNGFiles))
+	for name := range r.lossyPNGFiles {
+		files = append(files, name)
+	}
+	sort.Strings(files)
+	return files
 }
 
 // bitmapSubtitleVisibleAt 判断当前内部位图字幕在给定时间点是否真的可见。

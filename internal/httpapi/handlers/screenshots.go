@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"minfo/internal/config"
-	"minfo/internal/httpapi/logstream"
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/media"
 	"minfo/internal/screenshot"
@@ -41,7 +40,7 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer transport.CleanupMultipart(r)
 
-	logger := newInfoLogger(logstream.Open(r.FormValue("log_session")))
+	logger := newInfoLogger()
 	defer logger.Close()
 
 	path, cleanup, err := transport.InputPath(r)
@@ -88,10 +87,12 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		transport.WriteJSON(w, http.StatusOK, transport.InfoResponse{
-			OK:         true,
-			Output:     result.Output,
-			Logs:       pickRealtimeLogs(logger, result.Logs),
-			LogEntries: pickRealtimeLogEntries(logger),
+			OK:              true,
+			Output:          result.Output,
+			Logs:            pickRealtimeLogs(logger, result.Logs),
+			LogEntries:      pickRealtimeLogEntries(logger),
+			PNGLossyFiles:   result.LossyPNGFiles,
+			PNGLossyIndexes: result.LossyPNGIndexes,
 		})
 		return
 	}

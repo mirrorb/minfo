@@ -221,17 +221,35 @@ func TestNormalizeMediaInfoAspectRatioMapsCommonFullscreenValue(t *testing.T) {
 	}
 }
 
-func TestBuildAggressivePNGCompressionArgs(t *testing.T) {
-	args := buildAggressivePNGCompressionArgs("/tmp/input.png", "/tmp/output.png")
+func TestBuildOxiPNGCompressionArgs(t *testing.T) {
+	args := buildOxiPNGCompressionArgs("/tmp/input.png")
 	joined := strings.Join(args, " ")
 
-	if !strings.Contains(joined, "palettegen=stats_mode=single:max_colors=256") {
-		t.Fatalf("expected palettegen in aggressive PNG args, got %q", joined)
+	if !strings.Contains(joined, "-o max") {
+		t.Fatalf("expected max optimization level in oxipng args, got %q", joined)
 	}
-	if !strings.Contains(joined, "paletteuse=new=1:dither=sierra2_4a") {
-		t.Fatalf("expected paletteuse in aggressive PNG args, got %q", joined)
+	if !strings.Contains(joined, "--strip safe") {
+		t.Fatalf("expected safe metadata stripping in oxipng args, got %q", joined)
 	}
-	if !strings.Contains(joined, "-pix_fmt pal8") {
-		t.Fatalf("expected pal8 output in aggressive PNG args, got %q", joined)
+	if !strings.HasSuffix(joined, "/tmp/input.png") {
+		t.Fatalf("expected input path in oxipng args, got %q", joined)
+	}
+}
+
+func TestBuildPNGQuantCompressionArgs(t *testing.T) {
+	args := buildPNGQuantCompressionArgs("/tmp/input.png", "/tmp/output.png")
+	joined := strings.Join(args, " ")
+
+	if !strings.Contains(joined, "256") {
+		t.Fatalf("expected 256-color target in pngquant args, got %q", joined)
+	}
+	if !strings.Contains(joined, "--output /tmp/output.png") {
+		t.Fatalf("expected explicit output path in pngquant args, got %q", joined)
+	}
+	if !strings.Contains(joined, "--strip") {
+		t.Fatalf("expected metadata stripping in pngquant args, got %q", joined)
+	}
+	if !strings.HasSuffix(joined, "-- /tmp/input.png") {
+		t.Fatalf("expected input path after arg separator in pngquant args, got %q", joined)
 	}
 }

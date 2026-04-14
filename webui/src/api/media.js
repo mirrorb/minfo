@@ -167,6 +167,12 @@ function normalizeScreenshotJobPayload(data = {}) {
         logs: typeof data.logs === "string" ? data.logs : "",
         logEntries: normalizeLogEntries(data.log_entries),
         progress: normalizeTaskProgress(data.progress),
+        pngLossyFiles: Array.isArray(data.png_lossy_files) ? data.png_lossy_files.filter((item) => typeof item === "string" && item.trim() !== "") : [],
+        pngLossyIndexes: Array.isArray(data.png_lossy_indexes)
+            ? data.png_lossy_indexes
+                .map((item) => Number.parseInt(`${item}`, 10))
+                .filter((item) => Number.isFinite(item) && item >= 0)
+            : [],
     };
 }
 
