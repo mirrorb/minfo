@@ -393,7 +393,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             });
 
             clearPersistedActiveTask();
-            applyLinkResult(action, result.output || "");
+            applyLinkResult(action, result.output || "", result);
         } catch (err) {
             clearPersistedActiveTask();
             logTaskError(baseTask.logLabel, err);
@@ -623,11 +623,12 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     }
 
-    function applyLinkResult(action, output) {
+    function applyLinkResult(action, output, result = {}) {
         const links = extractDirectLinks(output);
+        const decoratedLinks = decorateLossyLinkItems(links, result?.pngLossyIndexes, result?.pngLossyFiles);
         if (action === "append-links") {
-            if (links.length > 0) {
-                const { items, addedCount, duplicateCount } = mergeOutputLinks(linkItems.value, links);
+            if (decoratedLinks.length > 0) {
+                const { items, addedCount, duplicateCount } = mergeOutputLinks(linkItems.value, decoratedLinks);
                 linkItems.value = items;
 
                 if (addedCount === 0) {
@@ -644,8 +645,8 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             return;
         }
 
-        if (links.length > 0) {
-            const { items, addedCount, duplicateCount } = mergeOutputLinks([], links);
+        if (decoratedLinks.length > 0) {
+            const { items, addedCount, duplicateCount } = mergeOutputLinks([], decoratedLinks);
             linkItems.value = items;
 
             if (addedCount === 0) {
@@ -675,6 +676,53 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         activateImageLinksPanel(true);
         setLinkStatusText("已取消图床任务。");
     }
+}
+
+function decorateLossyLinkItems(links, lossyIndexes = [], lossyFiles = []) {
+    const indexSet = new Set(
+        Array.isArray(lossyIndexes)
+            ? lossyIndexes
+                .map((item) => Number.parseInt(`${item}`, 10))
+                .filter((item) => Number.isFinite(item) && item >= 0)
+            : [],
+    );
+    const files = Array.isArray(lossyFiles)
+        ? lossyFiles.filter((item) => typeof item === "string" && item.trim() !== "")
+        : [];
+    const lossyNames = files.map((item) => item.trim().toLowerCase()).filter((item) => item !== "");
+
+    return links.map((url, index) => {
+        const filename = extractFilenameFromURL(url);
+        const isLossy = indexSet.has(index) || isLossyFilename(filename, lossyNames);
+        return {
+            url,
+            isLossy,
+            lossyTooltip: isLossy ? "为满足图床要求该图片已被有损压缩" : "",
+        };
+    });
+}
+
+function extractFilenameFromURL(url) {
+    if (typeof url !== "string" || url.trim() === "") {
+        return "";
+    }
+    try {
+        const parsed = new URL(url);
+        const pathname = parsed.pathname || "";
+        const segments = pathname.split("/").filter(Boolean);
+        return segments.length > 0 ? decodeURIComponent(segments[segments.length - 1]) : "";
+    } catch {
+        return "";
+    }
+}
+
+function isLossyFilename(filename, lossyNames) {
+    const normalizedFilename = typeof filename === "string" ? filename.trim().toLowerCase() : "";
+    if (normalizedFilename === "" || !Array.isArray(lossyNames) || lossyNames.length === 0) {
+        return false;
+    }
+
+    return lossyNames.some((lossyName) => normalizedFilename === lossyName || normalizedFilename.endsWith(`_${lossyName}`));
 }
 
 function normalizeTargetPath(value) {

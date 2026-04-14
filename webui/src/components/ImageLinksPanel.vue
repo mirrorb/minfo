@@ -29,6 +29,9 @@
                 <div class="output-link-list">
                     <article v-for="item in linkItems" :key="item.id" class="output-link-item">
                         <a class="output-link-preview" :href="item.url" target="_blank" rel="noreferrer noopener">
+                            <div v-if="item.isLossy" class="output-link-badge" :title="item.lossyTooltip || lossyTooltip" aria-label="该图片已被有损压缩">
+                                有损
+                            </div>
                             <div v-if="previewStateMap[item.id] !== 'loaded'" class="output-link-preview-state">
                                 <div v-if="previewStateMap[item.id] === 'error'" class="output-link-preview-error">预览失败</div>
                                 <div v-else class="output-link-preview-loading">
@@ -82,6 +85,7 @@ const props = defineProps({
 const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "clear", "remove-link"]);
 
 const previewStateMap = ref({});
+const lossyTooltip = "为满足图床要求该图片已被有损压缩";
 
 const isAppendActive = computed(() => props.busy && props.activeAction === "append-links");
 const appendDisabled = computed(() => {

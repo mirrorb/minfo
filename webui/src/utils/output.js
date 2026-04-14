@@ -68,6 +68,8 @@ export function normalizeOutputLinks(items) {
         links.push({
             id: typeof item?.id === "string" && item.id.trim() !== "" ? item.id : buildLinkId(),
             url,
+            isLossy: item?.isLossy === true,
+            lossyTooltip: typeof item?.lossyTooltip === "string" ? item.lossyTooltip : "",
         });
     }
 
@@ -81,7 +83,8 @@ export function mergeOutputLinks(existingItems, incomingLinks) {
     let duplicateCount = 0;
 
     for (const link of incomingLinks) {
-        const url = normalizeDirectLink(link);
+        const normalizedLink = normalizeIncomingLink(link);
+        const url = normalizedLink.url;
         if (!url) {
             continue;
         }
@@ -90,7 +93,12 @@ export function mergeOutputLinks(existingItems, incomingLinks) {
             continue;
         }
         seen.add(url);
-        additions.push({ id: buildLinkId(), url });
+        additions.push({
+            id: buildLinkId(),
+            url,
+            isLossy: normalizedLink.isLossy,
+            lossyTooltip: normalizedLink.lossyTooltip,
+        });
     }
 
     return {
@@ -146,6 +154,30 @@ function normalizeDirectLink(value) {
     }
 
     return url;
+}
+
+function normalizeIncomingLink(value) {
+    if (typeof value === "string") {
+        return {
+            url: normalizeDirectLink(value),
+            isLossy: false,
+            lossyTooltip: "",
+        };
+    }
+
+    if (!value || typeof value !== "object") {
+        return {
+            url: "",
+            isLossy: false,
+            lossyTooltip: "",
+        };
+    }
+
+    return {
+        url: normalizeDirectLink(value.url),
+        isLossy: value.isLossy === true,
+        lossyTooltip: typeof value.lossyTooltip === "string" ? value.lossyTooltip : "",
+    };
 }
 
 function buildLinkId() {

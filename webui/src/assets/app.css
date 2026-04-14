@@ -670,6 +670,22 @@ pre {
   aspect-ratio: 16 / 9;
 }
 
+.output-link-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(182, 91, 11, 0.92);
+  color: #fff8ef;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 10px 24px rgba(106, 55, 11, 0.28);
+  cursor: help;
+}
+
 .output-link-preview-state {
   position: absolute;
   inset: 0;
