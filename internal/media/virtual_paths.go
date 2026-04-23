@@ -1,4 +1,4 @@
-// Package media 处理虚拟 ISO 路径的解析与构造。
+// Package media 处理媒体输入路径和虚拟 ISO 路径的解析与构造。
 
 package media
 
@@ -31,7 +31,7 @@ func ResolveInputPath(ctx context.Context, input string) (string, func(), error)
 	return cleaned, func() {}, nil
 }
 
-// isVirtualISOPath 会判断虚拟ISO路径是否满足当前条件。
+// isVirtualISOPath 会判断虚拟 ISO 路径是否满足当前条件。
 func isVirtualISOPath(input string) bool {
 	_, _, ok := parseVirtualISOPath(input)
 	return ok

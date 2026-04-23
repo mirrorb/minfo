@@ -1,4 +1,4 @@
-// Package media 提供 ISO 挂载与清理逻辑。
+// Package media 提供 ISO 挂载、UDF 模块处理与清理逻辑。
 
 package media
 
@@ -70,7 +70,7 @@ func explainISOmountError(message string, modErr error) string {
 	return message
 }
 
-// isUnknownUDFMountError 会判断UnknownUDF 模块挂载错误是否满足当前条件。
+// isUnknownUDFMountError 会判断 Unknown UDF 文件系统挂载错误是否满足当前条件。
 func isUnknownUDFMountError(message string) bool {
 	lower := strings.ToLower(message)
 	return strings.Contains(lower, "unknown filesystem type 'udf'") || strings.Contains(lower, "unknown filesystem type \"udf\"")

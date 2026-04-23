@@ -1,4 +1,4 @@
-// Package media 提供媒体根目录和挂载点探测逻辑。
+// Package media 提供媒体根目录选择和挂载点自动探测逻辑。
 
 package media
 
@@ -109,7 +109,7 @@ func detectMountedRoots() []string {
 	return roots
 }
 
-// isTopLevelMount 会判断TopLevel挂载是否满足当前条件。
+// isTopLevelMount 会判断挂载点是否位于文件系统顶层。
 func isTopLevelMount(path string) bool {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
@@ -138,7 +138,7 @@ func decodeMountInfoField(value string) string {
 	return builder.String()
 }
 
-// isOctal 会判断Octal是否满足当前条件。
+// isOctal 会判断字符是否为八进制数字。
 func isOctal(ch byte) bool {
 	return ch >= '0' && ch <= '7'
 }

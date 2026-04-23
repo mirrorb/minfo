@@ -1,4 +1,4 @@
-// Package media 提供媒体根目录解析和路径联想逻辑。
+// Package media 提供媒体路径联想、根目录解析和虚拟 ISO 浏览辅助逻辑。
 
 package media
 
@@ -91,10 +91,7 @@ func ResolveRoots(roots []string) ([]string, error) {
 			continue
 		}
 		info, err := os.Stat(root)
-		if err != nil {
-			continue
-		}
-		if !info.IsDir() {
+		if err != nil || !info.IsDir() {
 			continue
 		}
 		if _, ok := seen[root]; ok {
@@ -258,12 +255,12 @@ func readSuggestedPathDuration(path string) string {
 	return formatMPLSDuration(duration)
 }
 
-// hasDirectorySuffix 会判断DirectorySuffix是否已经存在或具备。
+// hasDirectorySuffix 会判断目录后缀是否已经存在。
 func hasDirectorySuffix(value string) bool {
 	return strings.HasSuffix(value, string(filepath.Separator)) || strings.HasSuffix(value, "/") || strings.HasSuffix(value, "\\")
 }
 
-// isSubpath 会判断Subpath是否满足当前条件。
+// isSubpath 会判断 path 是否位于 root 目录之下。
 func isSubpath(root, path string) bool {
 	root = filepath.Clean(root)
 	path = filepath.Clean(path)
