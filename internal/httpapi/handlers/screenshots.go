@@ -91,6 +91,7 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 			Output:          result.Output,
 			Logs:            pickRealtimeLogs(logger, result.Logs),
 			LogEntries:      pickRealtimeLogEntries(logger),
+			LinkItems:       buildTransportImageLinkItems(result.Items),
 			PNGLossyFiles:   result.LossyPNGFiles,
 			PNGLossyIndexes: result.LossyPNGIndexes,
 		})

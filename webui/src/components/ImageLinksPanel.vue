@@ -29,10 +29,11 @@
                 <div class="output-link-list">
                     <article v-for="item in linkItems" :key="item.id" class="output-link-item">
                         <a class="output-link-preview" :href="item.url" target="_blank" rel="noreferrer noopener">
-                            <div v-if="item.isLossy" class="output-link-badge" :title="item.lossyTooltip || lossyTooltip" aria-label="该图片已被有损压缩">
-                                有损
-                            </div>
-                            <div v-if="previewStateMap[item.id] !== 'loaded'" class="output-link-preview-state">
+                            <div
+                                v-if="previewStateMap[item.id] !== 'loaded'"
+                                class="output-link-preview-state"
+                                :class="{ error: previewStateMap[item.id] === 'error' }"
+                            >
                                 <div v-if="previewStateMap[item.id] === 'error'" class="output-link-preview-error">预览失败</div>
                                 <div v-else class="output-link-preview-loading">
                                     <span class="output-link-spinner"></span>
@@ -40,15 +41,29 @@
                                 </div>
                             </div>
                             <img
-                                :class="{ loaded: previewStateMap[item.id] === 'loaded' }"
+                                :class="{ error: previewStateMap[item.id] === 'error' }"
                                 :src="item.url"
                                 alt="截图预览"
                                 loading="lazy"
-                                @load="markLoaded(item.id)"
+                                @load="handlePreviewLoad(item.id, $event)"
                                 @error="markError(item.id)"
                             />
                         </a>
                         <div class="output-link-details">
+                            <p v-if="item.filename" class="output-link-filename">{{ item.filename }}</p>
+                            <div class="output-link-meta">
+                                <span
+                                    v-if="item.isLossy"
+                                    class="output-link-meta-item output-link-badge"
+                                    :title="item.lossyTooltip || lossyTooltip"
+                                    aria-label="该图片已被有损压缩"
+                                >
+                                    有损
+                                </span>
+                                <span v-if="item.size > 0" class="output-link-meta-item">{{ formatFileSize(item.size) }}</span>
+                                <span v-if="previewSizeMap[item.id]" class="output-link-meta-item">{{ previewSizeMap[item.id] }}</span>
+                                <span v-else-if="previewStateMap[item.id] === 'loading'" class="output-link-meta-item muted">读取尺寸中</span>
+                            </div>
                             <a class="output-link-anchor" :href="item.url" target="_blank" rel="noreferrer noopener">
                                 {{ item.url }}
                             </a>
@@ -70,6 +85,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import TaskProgressBar from "./TaskProgressBar.vue";
+import { formatFileSize } from "../utils/path-browser";
 
 const props = defineProps({
     busy: { type: Boolean, required: true },
@@ -85,6 +101,7 @@ const props = defineProps({
 const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "clear", "remove-link"]);
 
 const previewStateMap = ref({});
+const previewSizeMap = ref({});
 const lossyTooltip = "为满足图床要求该图片已被有损压缩";
 
 const isAppendActive = computed(() => props.busy && props.activeAction === "append-links");
@@ -116,25 +133,42 @@ watch(
     () => props.linkItems,
     (items) => {
         const nextStateMap = {};
+        const nextSizeMap = {};
         for (const item of items) {
             nextStateMap[item.id] = previewStateMap.value[item.id] || "loading";
+            if (previewSizeMap.value[item.id]) {
+                nextSizeMap[item.id] = previewSizeMap.value[item.id];
+            }
         }
         previewStateMap.value = nextStateMap;
+        previewSizeMap.value = nextSizeMap;
     },
     { immediate: true, deep: true },
 );
 
-const markLoaded = (id) => {
+const handlePreviewLoad = (id, event) => {
+    const width = Number.parseInt(`${event?.target?.naturalWidth ?? ""}`.trim(), 10);
+    const height = Number.parseInt(`${event?.target?.naturalHeight ?? ""}`.trim(), 10);
     previewStateMap.value = {
         ...previewStateMap.value,
         [id]: "loaded",
     };
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        previewSizeMap.value = {
+            ...previewSizeMap.value,
+            [id]: `${width} × ${height}`,
+        };
+    }
 };
 
 const markError = (id) => {
     previewStateMap.value = {
         ...previewStateMap.value,
         [id]: "error",
+    };
+    previewSizeMap.value = {
+        ...previewSizeMap.value,
+        [id]: "",
     };
 };
 </script>

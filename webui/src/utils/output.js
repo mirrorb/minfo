@@ -68,6 +68,8 @@ export function normalizeOutputLinks(items) {
         links.push({
             id: typeof item?.id === "string" && item.id.trim() !== "" ? item.id : buildLinkId(),
             url,
+            filename: typeof item?.filename === "string" ? item.filename : "",
+            size: normalizeLinkSize(item?.size),
             isLossy: item?.isLossy === true,
             lossyTooltip: typeof item?.lossyTooltip === "string" ? item.lossyTooltip : "",
         });
@@ -96,6 +98,8 @@ export function mergeOutputLinks(existingItems, incomingLinks) {
         additions.push({
             id: buildLinkId(),
             url,
+            filename: normalizedLink.filename,
+            size: normalizedLink.size,
             isLossy: normalizedLink.isLossy,
             lossyTooltip: normalizedLink.lossyTooltip,
         });
@@ -160,6 +164,8 @@ function normalizeIncomingLink(value) {
     if (typeof value === "string") {
         return {
             url: normalizeDirectLink(value),
+            filename: "",
+            size: 0,
             isLossy: false,
             lossyTooltip: "",
         };
@@ -168,6 +174,8 @@ function normalizeIncomingLink(value) {
     if (!value || typeof value !== "object") {
         return {
             url: "",
+            filename: "",
+            size: 0,
             isLossy: false,
             lossyTooltip: "",
         };
@@ -175,9 +183,19 @@ function normalizeIncomingLink(value) {
 
     return {
         url: normalizeDirectLink(value.url),
+        filename: typeof value.filename === "string" ? value.filename.trim() : "",
+        size: normalizeLinkSize(value.size),
         isLossy: value.isLossy === true,
         lossyTooltip: typeof value.lossyTooltip === "string" ? value.lossyTooltip : "",
     };
+}
+
+function normalizeLinkSize(value) {
+    const size = Number.parseInt(`${value ?? ""}`.trim(), 10);
+    if (!Number.isFinite(size) || size <= 0) {
+        return 0;
+    }
+    return size;
 }
 
 function buildLinkId() {

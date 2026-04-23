@@ -49,10 +49,21 @@ type ScreenshotsResult struct {
 	LossyPNGIndexes []int
 }
 
+// UploadedImage 表示一次图床上传后返回的单张图片结果。
+type UploadedImage struct {
+	URL      string
+	Filename string
+	Size     int64
+}
+
+// UploadItemHandler 处理图床上传过程中单张已完成图片的实时回调。
+type UploadItemHandler func(item UploadedImage)
+
 // UploadResult 表示一次截图上传流程返回的直链文本和日志。
 type UploadResult struct {
 	Output          string
 	Logs            string
+	Items           []UploadedImage
 	LossyPNGFiles   []string
 	LossyPNGIndexes []int
 }
@@ -146,7 +157,12 @@ func RunUploadWithLogs(ctx context.Context, inputPath, outputDir, variant, subti
 
 // RunUploadWithLiveLogs 会执行截图加上传流程，并把实时日志通过回调逐行暴露给调用方。
 func RunUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (UploadResult, error) {
-	return runPixhostUploadWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
+	return RunUploadWithLiveEvents(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog, nil)
+}
+
+// RunUploadWithLiveEvents 会执行截图加上传流程，并把实时日志和已完成图片逐步暴露给调用方。
+func RunUploadWithLiveEvents(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
+	return runPixhostUploadWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog, onItem)
 }
 
 // randomScreenshotTimestampsForSource 针对已经解析好的媒体源生成随机截图时间点。

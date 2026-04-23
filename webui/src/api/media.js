@@ -167,6 +167,7 @@ function normalizeScreenshotJobPayload(data = {}) {
         logs: typeof data.logs === "string" ? data.logs : "",
         logEntries: normalizeLogEntries(data.log_entries),
         progress: normalizeTaskProgress(data.progress),
+        linkItems: normalizeLinkItems(data.link_items),
         pngLossyFiles: Array.isArray(data.png_lossy_files) ? data.png_lossy_files.filter((item) => typeof item === "string" && item.trim() !== "") : [],
         pngLossyIndexes: Array.isArray(data.png_lossy_indexes)
             ? data.png_lossy_indexes
@@ -174,6 +175,21 @@ function normalizeScreenshotJobPayload(data = {}) {
                 .filter((item) => Number.isFinite(item) && item >= 0)
             : [],
     };
+}
+
+function normalizeLinkItems(items) {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+
+    return items
+        .filter((item) => item && typeof item === "object")
+        .map((item) => ({
+            url: typeof item.url === "string" ? item.url : "",
+            filename: typeof item.filename === "string" ? item.filename : "",
+            size: Number.isFinite(item.size) && item.size > 0 ? Math.round(item.size) : 0,
+        }))
+        .filter((item) => item.url.trim() !== "");
 }
 
 function normalizeTaskProgress(progress) {

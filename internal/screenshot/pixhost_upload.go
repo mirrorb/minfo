@@ -31,17 +31,18 @@ type pixhostResponse struct {
 }
 
 // runPixhostUploadWithLiveLogs 会先生成截图，再把图片上传到 Pixhost，并合并两阶段日志。
-func runPixhostUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (UploadResult, error) {
+func runPixhostUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
 	screenshotResult, err := runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, count, onLog)
 	if err != nil {
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
 
-	output, uploadLogs, lossyIndexes, err := uploadImagesToPixhost(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, onLog)
+	output, uploadLogs, items, lossyIndexes, err := uploadImagesToPixhost(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, onLog, onItem)
 	logs := strings.TrimSpace(strings.Join(filterNonEmptyStrings(screenshotResult.Logs, uploadLogs), "\n\n"))
 	if err != nil {
 		return UploadResult{
 			Logs:            logs,
+			Items:           items,
 			LossyPNGFiles:   screenshotResult.LossyPNGFiles,
 			LossyPNGIndexes: lossyIndexes,
 		}, err
@@ -49,18 +50,19 @@ func runPixhostUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, var
 	return UploadResult{
 		Output:          output,
 		Logs:            logs,
+		Items:           items,
 		LossyPNGFiles:   screenshotResult.LossyPNGFiles,
 		LossyPNGIndexes: lossyIndexes,
 	}, nil
 }
 
 // uploadImagesToPixhost 过滤可上传图片，逐个上传到 Pixhost，并返回整理后的直链文本和日志。
-func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLog LogHandler) (string, string, []int, error) {
+func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLog LogHandler, onItem UploadItemHandler) (string, string, []UploadedImage, []int, error) {
 	logLines := make([]string, 0)
 	images := collectUploadableImages(files)
 	if len(images) == 0 {
 		logLines = appendUploadLogLine(logLines, onLog, "警告: 未找到有效图片文件")
-		return "", strings.Join(logLines, "\n"), nil, errors.New("no uploadable screenshots were found")
+		return "", strings.Join(logLines, "\n"), nil, nil, errors.New("no uploadable screenshots were found")
 	}
 
 	logLines = appendUploadLogLine(logLines, onLog, "开始处理 %d 个文件...", len(images))
@@ -76,6 +78,7 @@ func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLo
 	}
 
 	links := make([]string, 0, len(images))
+	items := make([]UploadedImage, 0, len(images))
 	lossyIndexes := make([]int, 0, len(lossySet))
 	successCount := 0
 	for _, imagePath := range images {
@@ -89,6 +92,11 @@ func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLo
 		}
 		successCount++
 		links = append(links, directURL)
+		uploadedItem := buildUploadedImage(imagePath, directURL)
+		items = append(items, uploadedItem)
+		if onItem != nil {
+			onItem(uploadedItem)
+		}
 		logLines = appendUploadLogLine(logLines, onLog, "已上传并校准域名: %s", filepath.Base(imagePath))
 	}
 
@@ -96,9 +104,23 @@ func uploadImagesToPixhost(ctx context.Context, files, lossyFiles []string, onLo
 	logLines = appendUploadLogLine(logLines, onLog, "处理完成! 成功: %d/%d", successCount, len(images))
 
 	if len(links) == 0 {
-		return "", strings.Join(logLines, "\n"), lossyIndexes, errors.New("pixhost upload completed but returned no links")
+		return "", strings.Join(logLines, "\n"), items, lossyIndexes, errors.New("pixhost upload completed but returned no links")
 	}
-	return strings.Join(extractDirectLinks(strings.Join(links, "\n")), "\n"), strings.Join(logLines, "\n"), lossyIndexes, nil
+	return strings.Join(extractDirectLinks(strings.Join(links, "\n")), "\n"), strings.Join(logLines, "\n"), items, lossyIndexes, nil
+}
+
+func buildUploadedImage(imagePath, directURL string) UploadedImage {
+	item := UploadedImage{
+		URL:      strings.TrimSpace(directURL),
+		Filename: filepath.Base(imagePath),
+	}
+
+	info, err := os.Stat(imagePath)
+	if err == nil && !info.IsDir() && info.Size() > 0 {
+		item.Size = info.Size()
+	}
+
+	return item
 }
 
 // appendUploadLogLine 追加一条上传日志；若提供实时回调则同步推送。

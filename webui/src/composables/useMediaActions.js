@@ -365,6 +365,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
     const runLinkTask = async ({ action, jobId = "" } = {}) => {
         const previousStatusText = linkStatusText.value;
         const isAppend = action === "append-links";
+        const baseLinkItems = isAppend ? linkItems.value.map((item) => ({ ...item })) : [];
         const baseTask = {
             jobType: "screenshot",
             action,
@@ -390,10 +391,11 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             persistActiveTask(trackedTask);
             const result = await waitForAsyncJob(fetchScreenshotJob, trackedTask.jobId, trackedTask.logLabel, (job) => {
                 applyLinkProgress(action, job.status, job.progress);
+                applyRunningLinkItems(action, baseLinkItems, job);
             });
 
             clearPersistedActiveTask();
-            applyLinkResult(action, result.output || "", result);
+            applyLinkResult(action, result.output || "", result, baseLinkItems);
         } catch (err) {
             clearPersistedActiveTask();
             logTaskError(baseTask.logLabel, err);
@@ -623,12 +625,25 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     }
 
-    function applyLinkResult(action, output, result = {}) {
-        const links = extractDirectLinks(output);
-        const decoratedLinks = decorateLossyLinkItems(links, result?.pngLossyIndexes, result?.pngLossyFiles);
+    function applyRunningLinkItems(action, baseItems, result = {}) {
+        if (isTerminalTaskStatus(result?.status)) {
+            return;
+        }
+
+        const decoratedLinks = buildDecoratedLinkItems(result, result?.output || "");
+        if (decoratedLinks.length === 0) {
+            return;
+        }
+
+        const { items } = mergeOutputLinks(action === "append-links" ? baseItems : [], decoratedLinks);
+        linkItems.value = items;
+    }
+
+    function applyLinkResult(action, output, result = {}, baseItems = []) {
+        const decoratedLinks = buildDecoratedLinkItems(result, output);
         if (action === "append-links") {
             if (decoratedLinks.length > 0) {
-                const { items, addedCount, duplicateCount } = mergeOutputLinks(linkItems.value, decoratedLinks);
+                const { items, addedCount, duplicateCount } = mergeOutputLinks(baseItems, decoratedLinks);
                 linkItems.value = items;
 
                 if (addedCount === 0) {
@@ -678,6 +693,16 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
     }
 }
 
+function buildDecoratedLinkItems(result = {}, output = "") {
+    const metadataItems = Array.isArray(result?.linkItems) ? result.linkItems : [];
+    if (metadataItems.length > 0) {
+        return decorateLossyLinkItems(metadataItems, result?.pngLossyIndexes, result?.pngLossyFiles);
+    }
+
+    const links = extractDirectLinks(output);
+    return decorateLossyLinkItems(links, result?.pngLossyIndexes, result?.pngLossyFiles);
+}
+
 function decorateLossyLinkItems(links, lossyIndexes = [], lossyFiles = []) {
     const indexSet = new Set(
         Array.isArray(lossyIndexes)
@@ -691,15 +716,43 @@ function decorateLossyLinkItems(links, lossyIndexes = [], lossyFiles = []) {
         : [];
     const lossyNames = files.map((item) => item.trim().toLowerCase()).filter((item) => item !== "");
 
-    return links.map((url, index) => {
-        const filename = extractFilenameFromURL(url);
+    return links.map((item, index) => {
+        const normalized = normalizeDecoratedLinkInput(item);
+        const filename = normalized.filename || extractFilenameFromURL(normalized.url);
         const isLossy = indexSet.has(index) || isLossyFilename(filename, lossyNames);
         return {
-            url,
+            url: normalized.url,
+            filename,
+            size: normalized.size,
             isLossy,
             lossyTooltip: isLossy ? "为满足图床要求该图片已被有损压缩" : "",
         };
     });
+}
+
+function normalizeDecoratedLinkInput(value) {
+    if (typeof value === "string") {
+        return {
+            url: value,
+            filename: "",
+            size: 0,
+        };
+    }
+
+    if (!value || typeof value !== "object") {
+        return {
+            url: "",
+            filename: "",
+            size: 0,
+        };
+    }
+
+    const size = Number.parseInt(`${value.size ?? ""}`.trim(), 10);
+    return {
+        url: typeof value.url === "string" ? value.url : "",
+        filename: typeof value.filename === "string" ? value.filename.trim() : "",
+        size: Number.isFinite(size) && size > 0 ? size : 0,
+    };
 }
 
 function extractFilenameFromURL(url) {

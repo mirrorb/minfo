@@ -47,6 +47,7 @@ type screenshotJob struct {
 	status          string
 	output          string
 	downloadURL     string
+	linkItems       []transport.ImageLinkItem
 	pngLossyFiles   []string
 	pngLossyIndexes []int
 	errMessage      string
@@ -243,19 +244,30 @@ func (j *screenshotJob) run() {
 
 	switch j.mode {
 	case screenshot.ModeLinks:
-		result, err := screenshot.RunUploadWithLiveLogs(ctx, j.inputPath, tempDir, j.variant, j.subtitleMode, j.count, j.logger.LogLine)
+		result, err := screenshot.RunUploadWithLiveEvents(
+			ctx,
+			j.inputPath,
+			tempDir,
+			j.variant,
+			j.subtitleMode,
+			j.count,
+			j.logger.LogLine,
+			func(item screenshot.UploadedImage) {
+				j.appendLinkItem(buildTransportImageLinkItem(item))
+			},
+		)
 		if err != nil {
 			j.fail(err)
 			return
 		}
-		j.succeed(result.Output, "", result.LossyPNGFiles, result.LossyPNGIndexes)
+		j.succeed(result.Output, "", buildTransportImageLinkItems(result.Items), result.LossyPNGFiles, result.LossyPNGIndexes)
 	default:
 		downloadURL, _, err := prepareScreenshotZipDownload(ctx, j.inputPath, tempDir, j.variant, j.subtitleMode, j.count, j.logger.LogLine)
 		if err != nil {
 			j.fail(err)
 			return
 		}
-		j.succeed("", downloadURL, nil, nil)
+		j.succeed("", downloadURL, nil, nil, nil)
 	}
 }
 
@@ -270,6 +282,7 @@ func (j *screenshotJob) snapshot() transport.ScreenshotJobResponse {
 		Mode:            j.mode,
 		Output:          j.output,
 		DownloadURL:     j.downloadURL,
+		LinkItems:       append([]transport.ImageLinkItem(nil), j.linkItems...),
 		Error:           j.errMessage,
 		PNGLossyFiles:   append([]string(nil), j.pngLossyFiles...),
 		PNGLossyIndexes: append([]int(nil), j.pngLossyIndexes...),
@@ -342,7 +355,7 @@ func (j *screenshotJob) requestCancel() {
 }
 
 // succeed 会记录后台任务成功产出的最终结果。
-func (j *screenshotJob) succeed(output, downloadURL string, pngLossyFiles []string, pngLossyIndexes []int) {
+func (j *screenshotJob) succeed(output, downloadURL string, linkItems []transport.ImageLinkItem, pngLossyFiles []string, pngLossyIndexes []int) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -351,6 +364,7 @@ func (j *screenshotJob) succeed(output, downloadURL string, pngLossyFiles []stri
 		j.status = screenshotJobStatusCanceled
 		j.output = ""
 		j.downloadURL = ""
+		j.linkItems = nil
 		j.pngLossyFiles = nil
 		j.pngLossyIndexes = nil
 		j.errMessage = "任务已取消。"
@@ -362,6 +376,7 @@ func (j *screenshotJob) succeed(output, downloadURL string, pngLossyFiles []stri
 	j.status = screenshotJobStatusSucceeded
 	j.output = output
 	j.downloadURL = downloadURL
+	j.linkItems = append([]transport.ImageLinkItem(nil), linkItems...)
 	j.pngLossyFiles = append([]string(nil), pngLossyFiles...)
 	j.pngLossyIndexes = append([]int(nil), pngLossyIndexes...)
 	j.errMessage = ""
@@ -379,6 +394,7 @@ func (j *screenshotJob) fail(err error) {
 		j.status = screenshotJobStatusCanceled
 		j.output = ""
 		j.downloadURL = ""
+		j.linkItems = nil
 		j.pngLossyFiles = nil
 		j.pngLossyIndexes = nil
 		j.errMessage = "任务已取消。"
@@ -390,6 +406,7 @@ func (j *screenshotJob) fail(err error) {
 	j.status = screenshotJobStatusFailed
 	j.output = ""
 	j.downloadURL = ""
+	j.linkItems = nil
 	j.pngLossyFiles = nil
 	j.pngLossyIndexes = nil
 	if err != nil {
@@ -414,11 +431,30 @@ func (j *screenshotJob) finishCanceled() {
 	j.status = screenshotJobStatusCanceled
 	j.output = ""
 	j.downloadURL = ""
+	j.linkItems = nil
 	j.pngLossyFiles = nil
 	j.pngLossyIndexes = nil
 	j.errMessage = "任务已取消。"
 	j.updatedAt = now
 	j.completedAt = now
+}
+
+func (j *screenshotJob) appendLinkItem(item transport.ImageLinkItem) {
+	if strings.TrimSpace(item.URL) == "" {
+		return
+	}
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	for _, existing := range j.linkItems {
+		if existing.URL == item.URL {
+			return
+		}
+	}
+
+	j.linkItems = append(j.linkItems, item)
+	j.updatedAt = time.Now()
 }
 
 // isCancellationRequested 会判断当前任务是否已经收到了取消请求。
@@ -432,6 +468,31 @@ func (j *screenshotJob) isCancellationRequested() bool {
 // isScreenshotJobCanceledError 会判断错误是否来自主动取消而不是普通失败。
 func isScreenshotJobCanceledError(err error) bool {
 	return errors.Is(err, context.Canceled)
+}
+
+func buildTransportImageLinkItems(items []screenshot.UploadedImage) []transport.ImageLinkItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	result := make([]transport.ImageLinkItem, 0, len(items))
+	for _, item := range items {
+		if normalized := buildTransportImageLinkItem(item); strings.TrimSpace(normalized.URL) != "" {
+			result = append(result, normalized)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func buildTransportImageLinkItem(item screenshot.UploadedImage) transport.ImageLinkItem {
+	return transport.ImageLinkItem{
+		URL:      strings.TrimSpace(item.URL),
+		Filename: item.Filename,
+		Size:     item.Size,
+	}
 }
 
 // buildScreenshotJobID 生成适合 URL 使用的随机任务 ID。

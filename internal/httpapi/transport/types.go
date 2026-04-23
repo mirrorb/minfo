@@ -8,6 +8,13 @@ type LogEntry struct {
 	Message   string `json:"message,omitempty"`
 }
 
+// ImageLinkItem 表示图床返回的一张图片及其元信息。
+type ImageLinkItem struct {
+	URL      string `json:"url,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
 // TaskProgress 表示后台任务当前阶段对应的进度信息。
 type TaskProgress struct {
 	Percent       float64 `json:"percent,omitempty"`
@@ -20,29 +27,31 @@ type TaskProgress struct {
 
 // InfoResponse 表示信息类接口共用的 JSON 响应。
 type InfoResponse struct {
-	OK              bool       `json:"ok"`
-	Output          string     `json:"output,omitempty"`
-	Error           string     `json:"error,omitempty"`
-	Logs            string     `json:"logs,omitempty"`
-	LogEntries      []LogEntry `json:"log_entries,omitempty"`
-	PNGLossyFiles   []string   `json:"png_lossy_files,omitempty"`
-	PNGLossyIndexes []int      `json:"png_lossy_indexes,omitempty"`
+	OK              bool            `json:"ok"`
+	Output          string          `json:"output,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	Logs            string          `json:"logs,omitempty"`
+	LogEntries      []LogEntry      `json:"log_entries,omitempty"`
+	LinkItems       []ImageLinkItem `json:"link_items,omitempty"`
+	PNGLossyFiles   []string        `json:"png_lossy_files,omitempty"`
+	PNGLossyIndexes []int           `json:"png_lossy_indexes,omitempty"`
 }
 
 // ScreenshotJobResponse 表示截图后台任务的创建结果、状态查询结果和最终产出。
 type ScreenshotJobResponse struct {
-	OK              bool          `json:"ok"`
-	JobID           string        `json:"job_id,omitempty"`
-	Status          string        `json:"status,omitempty"`
-	Mode            string        `json:"mode,omitempty"`
-	Output          string        `json:"output,omitempty"`
-	DownloadURL     string        `json:"download_url,omitempty"`
-	Error           string        `json:"error,omitempty"`
-	Logs            string        `json:"logs,omitempty"`
-	LogEntries      []LogEntry    `json:"log_entries,omitempty"`
-	Progress        *TaskProgress `json:"progress,omitempty"`
-	PNGLossyFiles   []string      `json:"png_lossy_files,omitempty"`
-	PNGLossyIndexes []int         `json:"png_lossy_indexes,omitempty"`
+	OK              bool            `json:"ok"`
+	JobID           string          `json:"job_id,omitempty"`
+	Status          string          `json:"status,omitempty"`
+	Mode            string          `json:"mode,omitempty"`
+	Output          string          `json:"output,omitempty"`
+	DownloadURL     string          `json:"download_url,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	Logs            string          `json:"logs,omitempty"`
+	LogEntries      []LogEntry      `json:"log_entries,omitempty"`
+	Progress        *TaskProgress   `json:"progress,omitempty"`
+	LinkItems       []ImageLinkItem `json:"link_items,omitempty"`
+	PNGLossyFiles   []string        `json:"png_lossy_files,omitempty"`
+	PNGLossyIndexes []int           `json:"png_lossy_indexes,omitempty"`
 }
 
 // InfoJobResponse 表示信息类后台任务的创建结果、状态查询结果和最终输出。
