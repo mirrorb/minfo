@@ -92,7 +92,7 @@ func (r *screenshotRunner) prepareMediaTimeline() error {
 	r.media.Duration = duration
 
 	if screenshotsource.LooksLikeDVDSource(r.sourcePath) {
-		r.preloadDVDMediaInfo()
+		r.subtitleFlow().PreloadDVDMediaInfo()
 	}
 	return nil
 }
@@ -109,7 +109,7 @@ func (r *screenshotRunner) prepareSubtitlePipeline() error {
 	if err := subtitleRunner.PrepareTextSubtitleRenderSource(); err != nil {
 		return err
 	}
-	r.prepareEmbeddedSubtitleFonts()
+	subtitleRunner.PrepareEmbeddedFonts()
 	subtitleRunner.LogSelectedSubtitleSummary()
 	if r.subtitle.Mode != "none" {
 		r.ensureSubtitleIndex()
@@ -241,36 +241,8 @@ func (r *screenshotRunner) subtitleFlow() *screenshotsubtitle.Runner {
 	})
 }
 
-func (r *screenshotRunner) preloadDVDMediaInfo() {
-	r.subtitleFlow().PreloadDVDMediaInfo()
-}
-
-func (r *screenshotRunner) prepareBlurayProbeContext() {
-	r.subtitleFlow().PrepareBlurayProbeContext()
-}
-
-func (r *screenshotRunner) chooseSubtitle() error {
-	return r.subtitleFlow().Choose()
-}
-
-func (r *screenshotRunner) prepareTextSubtitleRenderSource() error {
-	return r.subtitleFlow().PrepareTextSubtitleRenderSource()
-}
-
-func (r *screenshotRunner) shouldExtractInternalTextSubtitle() bool {
-	return r.subtitleFlow().ShouldExtractInternalTextSubtitle()
-}
-
-func (r *screenshotRunner) logSelectedSubtitleSummary() {
-	r.subtitleFlow().LogSelectedSubtitleSummary()
-}
-
 func (r *screenshotRunner) ensureSubtitleIndex() []screenshotruntime.SubtitleSpan {
 	return r.subtitleFlow().EnsureIndex()
-}
-
-func internalTextSubtitleExtractionPlan(codec string) (string, string, string, string) {
-	return screenshotsubtitle.InternalTextSubtitleExtractionPlan(codec)
 }
 
 // ensureDVDMediaInfoResult 在 DVD 场景下只探测一次 mediainfo 结果，并缓存供后续字幕与比例逻辑复用。

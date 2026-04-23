@@ -1,6 +1,4 @@
-// Package screenshot 负责在文字字幕渲染前准备内封字体附件。
-
-package screenshot
+package subtitle
 
 import (
 	"encoding/json"
@@ -11,19 +9,18 @@ import (
 	"strings"
 
 	screenshotruntime "minfo/internal/screenshot/runtime"
-	screenshotsubtitle "minfo/internal/screenshot/subtitle"
 	"minfo/internal/system"
 )
 
-type subtitleFontAttachment struct {
+type fontAttachment struct {
 	FileName string
 	MimeType string
 	Codec    string
 }
 
-// prepareEmbeddedSubtitleFonts 会在 ASS/SSA 场景下优先提取 MKV 附件字体供 libass 使用。
-func (r *screenshotRunner) prepareEmbeddedSubtitleFonts() {
-	if !r.shouldUseEmbeddedSubtitleFonts() {
+// PrepareEmbeddedFonts 会在 ASS/SSA 场景下优先提取 MKV 附件字体供 libass 使用。
+func (r *Runner) PrepareEmbeddedFonts() {
+	if !r.ShouldUseEmbeddedFonts() {
 		return
 	}
 
@@ -42,7 +39,7 @@ func (r *screenshotRunner) prepareEmbeddedSubtitleFonts() {
 		return
 	}
 
-	stdout, stderr, err := system.RunCommandInDir(r.ctx, fontDir, r.tools.FFmpegBin, buildEmbeddedFontExtractionArgs(r.sourcePath)...)
+	stdout, stderr, err := system.RunCommandInDir(r.Ctx, fontDir, r.Tools.FFmpegBin, buildEmbeddedFontExtractionArgs(r.SourcePath)...)
 	if err != nil {
 		_ = os.RemoveAll(fontDir)
 		r.logf("[提示] MKV 内封字体提取失败，将回退系统字体：%s", system.BestErrorMessage(err, stderr, stdout))
@@ -55,26 +52,27 @@ func (r *screenshotRunner) prepareEmbeddedSubtitleFonts() {
 		return
 	}
 
-	r.subtitleState.SubtitleFontDir = fontDir
+	r.state().SubtitleFontDir = fontDir
 	r.logf("[信息] 检测到 MKV 内封字体 %d 个，截图渲染将优先使用附件字体：%s",
 		len(attachments),
-		summarizeSubtitleFontAttachments(attachments),
+		summarizeFontAttachments(attachments),
 	)
 }
 
-// shouldUseEmbeddedSubtitleFonts 会判断当前字幕场景是否值得优先提取 MKV 附件字体。
-func (r *screenshotRunner) shouldUseEmbeddedSubtitleFonts() bool {
-	if r == nil || r.subtitle.Mode == "none" {
+// ShouldUseEmbeddedFonts 会判断当前字幕场景是否值得优先提取 MKV 附件字体。
+func (r *Runner) ShouldUseEmbeddedFonts() bool {
+	selection := r.selection()
+	if selection.Mode == "none" {
 		return false
 	}
 
-	switch strings.ToLower(strings.TrimSpace(r.subtitle.Codec)) {
+	switch strings.ToLower(strings.TrimSpace(selection.Codec)) {
 	case "ass", "ssa":
 	default:
 		return false
 	}
 
-	switch strings.ToLower(strings.TrimSpace(filepath.Ext(r.sourcePath))) {
+	switch strings.ToLower(strings.TrimSpace(filepath.Ext(r.SourcePath))) {
 	case ".mkv", ".mk3d", ".mka", ".mks":
 		return true
 	default:
@@ -83,18 +81,18 @@ func (r *screenshotRunner) shouldUseEmbeddedSubtitleFonts() bool {
 }
 
 // probeEmbeddedFontAttachments 会探测 Matroska 附件里是否存在字体文件。
-func (r *screenshotRunner) probeEmbeddedFontAttachments() ([]subtitleFontAttachment, error) {
+func (r *Runner) probeEmbeddedFontAttachments() ([]fontAttachment, error) {
 	args := []string{
-		"-probesize", r.settings.ProbeSize,
-		"-analyzeduration", r.settings.Analyze,
+		"-probesize", r.Settings.ProbeSize,
+		"-analyzeduration", r.Settings.Analyze,
 		"-v", "error",
 		"-select_streams", "t",
 		"-show_entries", "stream=codec_name:stream_tags=filename,mimetype",
 		"-of", "json",
-		r.sourcePath,
+		r.SourcePath,
 	}
 
-	stdout, stderr, err := system.RunCommand(r.ctx, r.tools.FFprobeBin, args...)
+	stdout, stderr, err := system.RunCommand(r.Ctx, r.Tools.FFprobeBin, args...)
 	if err != nil {
 		return nil, fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
 	}
@@ -107,7 +105,7 @@ func (r *screenshotRunner) probeEmbeddedFontAttachments() ([]subtitleFontAttachm
 		return nil, err
 	}
 
-	attachments := make([]subtitleFontAttachment, 0, len(payload.Streams))
+	attachments := make([]fontAttachment, 0, len(payload.Streams))
 	for _, stream := range payload.Streams {
 		fileName := attachmentTagValue(stream.Tags, "filename")
 		mimeType := strings.ToLower(strings.TrimSpace(attachmentTagValue(stream.Tags, "mimetype")))
@@ -116,7 +114,7 @@ func (r *screenshotRunner) probeEmbeddedFontAttachments() ([]subtitleFontAttachm
 			continue
 		}
 
-		attachments = append(attachments, subtitleFontAttachment{
+		attachments = append(attachments, fontAttachment{
 			FileName: fileName,
 			MimeType: mimeType,
 			Codec:    codec,
@@ -143,7 +141,7 @@ func attachmentTagValue(tags map[string]interface{}, key string) string {
 	if len(tags) == 0 {
 		return ""
 	}
-	return strings.TrimSpace(screenshotsubtitle.JSONString(tags[key]))
+	return strings.TrimSpace(JSONString(tags[key]))
 }
 
 // isFontAttachment 会根据文件名、mime 和 codec 粗略判断附件是否为字体。
@@ -176,8 +174,8 @@ func isFontAttachment(fileName, mimeType, codec string) bool {
 	}
 }
 
-// summarizeSubtitleFontAttachments 会把附件字体名压缩成简短稳定的日志文案。
-func summarizeSubtitleFontAttachments(attachments []subtitleFontAttachment) string {
+// summarizeFontAttachments 会把附件字体名压缩成简短稳定的日志文案。
+func summarizeFontAttachments(attachments []fontAttachment) string {
 	if len(attachments) == 0 {
 		return "无"
 	}
@@ -186,7 +184,7 @@ func summarizeSubtitleFontAttachments(attachments []subtitleFontAttachment) stri
 	for _, item := range attachments {
 		name := strings.TrimSpace(item.FileName)
 		if name == "" {
-			name = subtitleFontAttachmentLabel(item)
+			name = fontAttachmentLabel(item)
 		}
 		names = append(names, name)
 	}
@@ -198,8 +196,8 @@ func summarizeSubtitleFontAttachments(attachments []subtitleFontAttachment) stri
 	return strings.Join(names, ", ")
 }
 
-// subtitleFontAttachmentLabel 会为没有文件名的附件生成可读标识。
-func subtitleFontAttachmentLabel(item subtitleFontAttachment) string {
+// fontAttachmentLabel 会为没有文件名的附件生成可读标识。
+func fontAttachmentLabel(item fontAttachment) string {
 	if strings.TrimSpace(item.MimeType) != "" {
 		return item.MimeType
 	}

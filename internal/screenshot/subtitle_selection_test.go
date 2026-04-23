@@ -69,7 +69,7 @@ func TestShouldExtractInternalTextSubtitleForTextSubtitle(t *testing.T) {
 		},
 	}
 
-	if !runner.shouldExtractInternalTextSubtitle() {
+	if !runner.subtitleFlow().ShouldExtractInternalTextSubtitle() {
 		t.Fatalf("expected internal text subtitle task to extract once")
 	}
 }
@@ -83,7 +83,7 @@ func TestShouldExtractInternalTextSubtitleForSingleShotTask(t *testing.T) {
 		},
 	}
 
-	if !runner.shouldExtractInternalTextSubtitle() {
+	if !runner.subtitleFlow().ShouldExtractInternalTextSubtitle() {
 		t.Fatalf("expected single-shot internal text subtitle task to extract once")
 	}
 }
@@ -97,7 +97,7 @@ func TestShouldExtractInternalTextSubtitleSkipsASSLikeCodecs(t *testing.T) {
 		},
 	}
 
-	if !runner.shouldExtractInternalTextSubtitle() {
+	if !runner.subtitleFlow().ShouldExtractInternalTextSubtitle() {
 		t.Fatalf("expected ASS subtitles to extract in original format")
 	}
 }
@@ -111,7 +111,7 @@ func TestShouldUseEmbeddedSubtitleFontsForMatroskaASS(t *testing.T) {
 		},
 	}
 
-	if !runner.shouldUseEmbeddedSubtitleFonts() {
+	if !runner.subtitleFlow().ShouldUseEmbeddedFonts() {
 		t.Fatal("expected MKV ASS subtitle render to prefer embedded fonts")
 	}
 }
@@ -135,7 +135,7 @@ func TestShouldUseEmbeddedSubtitleFontsSkipsNonASSAndNonMatroska(t *testing.T) {
 	}
 
 	for _, runner := range tests {
-		if runner.shouldUseEmbeddedSubtitleFonts() {
+		if runner.subtitleFlow().ShouldUseEmbeddedFonts() {
 			t.Fatalf("expected %+v to skip embedded MKV font preparation", runner.subtitle)
 		}
 	}
@@ -177,7 +177,7 @@ func TestPrepareTextSubtitleRenderSourceReturnsErrorForUnsupportedTextSubtitle(t
 		},
 	}
 
-	err := runner.prepareTextSubtitleRenderSource()
+	err := runner.subtitleFlow().PrepareTextSubtitleRenderSource()
 	if err == nil {
 		t.Fatal("expected unsupported text subtitle codec error")
 	}
@@ -203,7 +203,7 @@ func TestChooseSubtitleReturnsErrorForUnsupportedExternalTextSubtitle(t *testing
 		subtitle:     screenshotruntime.SubtitleSelection{},
 	}
 
-	err := runner.chooseSubtitle()
+	err := runner.subtitleFlow().Choose()
 	if err == nil {
 		t.Fatal("expected unsupported external text subtitle error")
 	}
@@ -213,7 +213,7 @@ func TestChooseSubtitleReturnsErrorForUnsupportedExternalTextSubtitle(t *testing
 }
 
 func TestInternalTextSubtitleExtractionPlanForASS(t *testing.T) {
-	pattern, codecArg, extractedCodec, logMessage := internalTextSubtitleExtractionPlan("ass")
+	pattern, codecArg, extractedCodec, logMessage := screenshotsubtitle.InternalTextSubtitleExtractionPlan("ass")
 
 	if pattern != "minfo-sub-*.ass" {
 		t.Fatalf("pattern = %q, want %q", pattern, "minfo-sub-*.ass")
@@ -230,7 +230,7 @@ func TestInternalTextSubtitleExtractionPlanForASS(t *testing.T) {
 }
 
 func TestInternalTextSubtitleExtractionPlanForSSA(t *testing.T) {
-	pattern, codecArg, extractedCodec, logMessage := internalTextSubtitleExtractionPlan("ssa")
+	pattern, codecArg, extractedCodec, logMessage := screenshotsubtitle.InternalTextSubtitleExtractionPlan("ssa")
 
 	if pattern != "minfo-sub-*.ssa" {
 		t.Fatalf("pattern = %q, want %q", pattern, "minfo-sub-*.ssa")
@@ -276,7 +276,7 @@ func TestPreloadDVDMediaInfoLogsProgressBeforeProbe(t *testing.T) {
 		},
 	}
 
-	runner.preloadDVDMediaInfo()
+	runner.subtitleFlow().PreloadDVDMediaInfo()
 
 	if !strings.Contains(runner.logs(), "[进度] 字幕 1/3: 正在读取 DVD MediaInfo 字幕元数据。") {
 		t.Fatalf("logs = %q, want dvd mediainfo subtitle progress", runner.logs())
