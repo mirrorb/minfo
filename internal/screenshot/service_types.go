@@ -22,6 +22,9 @@ const (
 
 	SubtitleModeAuto = "auto"
 	SubtitleModeOff  = "off"
+
+	HDRProcessorLibplacebo = "libplacebo"
+	HDRProcessorZscale     = "zscale"
 )
 
 // ScreenshotsResult 表示一次截图流程返回的文件列表和日志。

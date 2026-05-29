@@ -41,7 +41,7 @@ func handleScreenshotZipDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	if err := writeScreenshotZipResponse(ctx, w, path, tempDir, options.Variant, options.SubtitleMode, options.Count); err != nil {
+	if err := writeScreenshotZipResponse(ctx, w, path, tempDir, options.Variant, options.SubtitleMode, options.HDRProcessor, options.Count); err != nil {
 		transport.WriteError(w, http.StatusInternalServerError, err.Error())
 	}
 }
@@ -52,8 +52,8 @@ func shouldPrepareDownload(r *http.Request) bool {
 }
 
 // prepareScreenshotZipDownload 生成截图压缩包并保存到临时下载缓存，返回可复用的下载地址。
-func prepareScreenshotZipDownload(ctx context.Context, path, tempDir, variant, subtitleMode string, count int, onLog screenshot.LogHandler) (string, string, error) {
-	zipBytes, logs, err := generateScreenshotZip(ctx, path, tempDir, variant, subtitleMode, count, onLog)
+func prepareScreenshotZipDownload(ctx context.Context, path, tempDir, variant, subtitleMode, hdrProcessor string, count int, onLog screenshot.LogHandler) (string, string, error) {
+	zipBytes, logs, err := generateScreenshotZip(ctx, path, tempDir, variant, subtitleMode, hdrProcessor, count, onLog)
 	if err != nil {
 		return "", logs, err
 	}
@@ -67,8 +67,8 @@ func prepareScreenshotZipDownload(ctx context.Context, path, tempDir, variant, s
 }
 
 // writeScreenshotZipResponse 生成截图压缩包并直接以附件形式写回响应。
-func writeScreenshotZipResponse(ctx context.Context, w http.ResponseWriter, path, tempDir, variant, subtitleMode string, count int) error {
-	zipBytes, _, err := generateScreenshotZip(ctx, path, tempDir, variant, subtitleMode, count, nil)
+func writeScreenshotZipResponse(ctx context.Context, w http.ResponseWriter, path, tempDir, variant, subtitleMode, hdrProcessor string, count int) error {
+	zipBytes, _, err := generateScreenshotZip(ctx, path, tempDir, variant, subtitleMode, hdrProcessor, count, nil)
 	if err != nil {
 		return err
 	}

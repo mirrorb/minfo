@@ -50,8 +50,8 @@ export async function cancelInfoJob(jobId) {
     return data;
 }
 
-export async function createScreenshotJob(path, variant, subtitleMode, count, mode) {
-    const response = await postForm("/api/screenshot-jobs", { path, mode, variant, subtitle_mode: subtitleMode, count });
+export async function createScreenshotJob(path, variant, subtitleMode, hdrProcessor, count, mode) {
+    const response = await postForm("/api/screenshot-jobs", { path, mode, variant, subtitle_mode: subtitleMode, hdr_processor: hdrProcessor, count });
     const data = normalizeScreenshotJobPayload(await safeReadJSON(response));
     if (!response.ok || !data.ok || typeof data.jobId !== "string" || data.jobId.trim() === "") {
         throw buildResponseError(data.error || "截图任务创建失败。", data);

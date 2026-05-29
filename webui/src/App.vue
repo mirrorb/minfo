@@ -39,6 +39,24 @@
                         <ScreenshotSubtitleModePicker v-model="screenshotSubtitleMode" :busy="busy" />
                     </div>
                     <div class="field">
+                        <div class="field-label-with-help">
+                            <label class="field-label-muted">HDR / DV 色彩空间转换</label>
+                            <span
+                                class="field-help"
+                                tabindex="0"
+                                role="note"
+                                aria-label="查看 HDR / DV 色彩空间转换说明"
+                            >
+                                <span class="field-help-trigger" aria-hidden="true">?</span>
+                                <span class="field-help-bubble">
+                                    <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景；但当前实现依赖软件 Vulkan，速度通常较慢。<br />
+                                    <strong>zscale</strong>：兼容性更好、速度通常更快，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准。
+                                </span>
+                            </span>
+                        </div>
+                        <ScreenshotHDRProcessorPicker v-model="screenshotHDRProcessor" :busy="busy" />
+                    </div>
+                    <div class="field">
                         <label for="screenshot-count" class="field-label-muted">截图数量</label>
                         <input
                             id="screenshot-count"
@@ -116,6 +134,7 @@ import ImageLinksPanel from "./components/ImageLinksPanel.vue";
 import NoticeToast from "./components/NoticeToast.vue";
 import OutputPanel from "./components/OutputPanel.vue";
 import PathBrowser from "./components/PathBrowser.vue";
+import ScreenshotHDRProcessorPicker from "./components/ScreenshotHDRProcessorPicker.vue";
 import ScreenshotSubtitleModePicker from "./components/ScreenshotSubtitleModePicker.vue";
 import ScreenshotVariantPicker from "./components/ScreenshotVariantPicker.vue";
 import { useMediaActions } from "./composables/useMediaActions";
@@ -129,13 +148,14 @@ const versionLabel = /^\d/.test(appVersion) ? `v${appVersion}` : appVersion;
 const persistedState = loadAppState();
 const screenshotVariant = ref(persistedState.screenshotVariant);
 const screenshotSubtitleMode = ref(persistedState.screenshotSubtitleMode);
+const screenshotHDRProcessor = ref(persistedState.screenshotHDRProcessor);
 const screenshotCount = ref(persistedState.screenshotCount);
 const bdinfoMode = ref(persistedState.bdinfoMode);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
 });
-const mediaActions = useMediaActions(pathBrowser.path, screenshotVariant, screenshotSubtitleMode, screenshotCount, pathBrowser.hasInput);
+const mediaActions = useMediaActions(pathBrowser.path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, pathBrowser.hasInput);
 
 const clampScreenshotCount = (value) => {
     const parsed = Number.parseInt(`${value ?? ""}`.trim(), 10);
@@ -205,13 +225,14 @@ const {
 } = mediaActions;
 
 watch(
-    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotCount, bdinfoMode],
-    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextScreenshotCount, nextBDInfoMode]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, bdinfoMode],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextBDInfoMode]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
             screenshotVariant: nextVariant,
             screenshotSubtitleMode: nextSubtitleMode,
+            screenshotHDRProcessor: nextHDRProcessor,
             screenshotCount: nextScreenshotCount,
             bdinfoMode: nextBDInfoMode,
         });

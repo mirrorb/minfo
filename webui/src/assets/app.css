@@ -234,6 +234,86 @@ label {
   color: var(--muted);
 }
 
+.field-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.field-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(47, 111, 109, 0.35);
+  background: rgba(47, 111, 109, 0.08);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.field-help:hover .field-help-trigger,
+.field-help:focus .field-help-trigger,
+.field-help:focus-within .field-help-trigger {
+  background: rgba(47, 111, 109, 0.16);
+  transform: translateY(-1px);
+}
+
+.field-help-bubble {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 20;
+  width: min(320px, calc(100vw - 88px));
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(27, 31, 34, 0.96);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.55;
+  box-shadow: 0 12px 28px rgba(14, 22, 30, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.field-help-bubble::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 10px;
+  width: 12px;
+  height: 12px;
+  background: rgba(27, 31, 34, 0.96);
+  transform: rotate(45deg);
+}
+
+.field-help:hover .field-help-bubble,
+.field-help:focus .field-help-bubble,
+.field-help:focus-within .field-help-bubble {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.field-help-bubble strong {
+  color: #ffffff;
+}
+
 input[type="file"],
 input[type="text"],
 input[type="number"] {

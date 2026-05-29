@@ -53,13 +53,13 @@ func (r *screenshotRunner) detectColorspace() string {
 }
 
 // buildColorspaceChain 返回 ffmpeg 使用的色彩空间转换过滤器链。
-func buildColorspaceChain(info string, preferLibplacebo bool) string {
+func buildColorspaceChain(info, hdrProcessor string) string {
 	switch {
-	case shouldPreferLibplaceboColorspace(info) && preferLibplacebo:
+	case shouldUseLibplaceboColorspace(info, hdrProcessor):
 		// Follow FFmpeg's documented CPU/llvmpipe example and keep the HDR/DV
 		// libplacebo path conservative by disabling the expensive peak detector.
 		return buildLibplaceboColorspaceChain(info)
-	case strings.Contains(info, "bt2020") && (strings.Contains(info, "smpte2084") || strings.Contains(info, "arib-std-b67")):
+	case shouldUseAdvancedColorspaceChain(info):
 		return "format=yuv420p10le,zscale=t=linear:npl=203,format=gbrpf32le,tonemap=mobius:param=0.3:desat=2.0,zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
 	case strings.Contains(info, "bt2020"):
 		return "zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
@@ -68,8 +68,8 @@ func buildColorspaceChain(info string, preferLibplacebo bool) string {
 	}
 }
 
-// shouldPreferLibplaceboColorspace 会判断当前色彩元数据是否更适合走 libplacebo 链路。
-func shouldPreferLibplaceboColorspace(info string) bool {
+// shouldUseAdvancedColorspaceChain 会判断当前色彩元数据是否需要走 HDR / WCG 特殊处理链。
+func shouldUseAdvancedColorspaceChain(info string) bool {
 	if strings.TrimSpace(info) == "" {
 		return false
 	}
@@ -77,6 +77,11 @@ func shouldPreferLibplaceboColorspace(info string) bool {
 		return true
 	}
 	return strings.Contains(info, "bt2020") && (strings.Contains(info, "smpte2084") || strings.Contains(info, "arib-std-b67"))
+}
+
+// shouldUseLibplaceboColorspace 会判断当前色彩元数据是否应该走 libplacebo 链路。
+func shouldUseLibplaceboColorspace(info, hdrProcessor string) bool {
+	return shouldUseAdvancedColorspaceChain(info) && NormalizeHDRProcessor(hdrProcessor) == HDRProcessorLibplacebo
 }
 
 // buildLibplaceboColorspaceChain 会构建 HDR/DV 转换到 sRGB 输出的 libplacebo 过滤器链。

@@ -36,6 +36,7 @@ type screenshotJob struct {
 	inputPath       string
 	variant         string
 	subtitleMode    string
+	hdrProcessor    string
 	count           int
 	status          string
 	output          string
@@ -72,6 +73,7 @@ func createScreenshotJob(request screenshotRequest) (*screenshotJob, error) {
 		inputPath:    request.InputPath,
 		variant:      request.Variant,
 		subtitleMode: request.SubtitleMode,
+		hdrProcessor: request.HDRProcessor,
 		count:        request.Count,
 		status:       screenshotJobStatusPending,
 		createdAt:    now,

@@ -15,6 +15,7 @@ type screenshotRunner struct {
 	outputDir        string
 	variant          string
 	subtitleMode     string
+	hdrProcessor     string
 	requested        []float64
 	settings         screenshotruntime.VariantSettings
 	tools            screenshotruntime.Toolchain

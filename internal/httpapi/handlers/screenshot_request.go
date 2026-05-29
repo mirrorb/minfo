@@ -17,6 +17,7 @@ type screenshotRequest struct {
 	Cleanup      func()
 	Variant      string
 	SubtitleMode string
+	HDRProcessor string
 	Count        int
 }
 
@@ -24,6 +25,7 @@ type screenshotRequest struct {
 type screenshotRunOptions struct {
 	Variant      string
 	SubtitleMode string
+	HDRProcessor string
 	Count        int
 }
 
@@ -41,6 +43,7 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 		Cleanup:      cleanup,
 		Variant:      options.Variant,
 		SubtitleMode: options.SubtitleMode,
+		HDRProcessor: options.HDRProcessor,
 		Count:        options.Count,
 	}, nil
 }
@@ -50,6 +53,7 @@ func normalizeScreenshotFormOptions(r *http.Request) screenshotRunOptions {
 	return screenshotRunOptions{
 		Variant:      screenshot.NormalizeVariant(r.FormValue("variant")),
 		SubtitleMode: screenshot.NormalizeSubtitleMode(r.FormValue("subtitle_mode")),
+		HDRProcessor: screenshot.NormalizeHDRProcessor(r.FormValue("hdr_processor")),
 		Count:        screenshot.NormalizeCount(r.FormValue("count")),
 	}
 }
@@ -59,6 +63,7 @@ func normalizeScreenshotQueryOptions(r *http.Request) screenshotRunOptions {
 	return screenshotRunOptions{
 		Variant:      screenshot.NormalizeVariant(r.URL.Query().Get("variant")),
 		SubtitleMode: screenshot.NormalizeSubtitleMode(r.URL.Query().Get("subtitle_mode")),
+		HDRProcessor: screenshot.NormalizeHDRProcessor(r.URL.Query().Get("hdr_processor")),
 		Count:        screenshot.NormalizeCount(r.URL.Query().Get("count")),
 	}
 }

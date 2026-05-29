@@ -109,12 +109,13 @@ func (r *screenshotRunner) applyLibplaceboRenderFallback(err error) bool {
 		return false
 	}
 
-	fallbackChain := buildColorspaceChain(r.render.ColorInfo, false)
+	originalReady := r.tools.LibplaceboReady
+	r.tools.LibplaceboReady = false
+	fallbackChain := buildColorspaceChain(r.render.ColorInfo, r.effectiveHDRProcessor())
 	if strings.TrimSpace(fallbackChain) == "" {
+		r.tools.LibplaceboReady = originalReady
 		return false
 	}
-
-	r.tools.LibplaceboReady = false
 	r.render.ColorChain = fallbackChain
 	r.logf("[提示] libplacebo/Vulkan 渲染失败，自动回退到兼容色彩链后重试当前截图。")
 	return true
@@ -142,6 +143,11 @@ func isLibplaceboRenderCrashMessage(message string) bool {
 		return true
 	}
 	return false
+}
+
+// usesZscaleColorspace 会判断当前渲染链是否正在使用 zscale / tonemap 兼容链。
+func (r *screenshotRunner) usesZscaleColorspace() bool {
+	return r != nil && (strings.Contains(r.render.ColorChain, "zscale=") || strings.Contains(r.render.ColorChain, "tonemap="))
 }
 
 // renderCoarseBack 会根据字幕类型返回渲染阶段使用的回溯秒数。

@@ -9,8 +9,8 @@ import (
 )
 
 // generateScreenshotZip 运行截图流程并将输出文件打包成 ZIP 数据。
-func generateScreenshotZip(ctx context.Context, path, tempDir, variant, subtitleMode string, count int, onLog screenshot.LogHandler) ([]byte, string, error) {
-	result, err := screenshot.RunScreenshotsWithLiveLogs(ctx, path, tempDir, variant, subtitleMode, count, onLog)
+func generateScreenshotZip(ctx context.Context, path, tempDir, variant, subtitleMode, hdrProcessor string, count int, onLog screenshot.LogHandler) ([]byte, string, error) {
+	result, err := screenshot.RunScreenshotsWithLiveLogs(ctx, path, tempDir, variant, subtitleMode, hdrProcessor, count, onLog)
 	if err != nil {
 		return nil, result.Logs, err
 	}

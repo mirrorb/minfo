@@ -422,7 +422,7 @@ func TestNormalizeRenderProgressWindow(t *testing.T) {
 
 func TestBuildColorspaceChainForHDR(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|"
-	chain := buildColorspaceChain(info, true)
+	chain := buildColorspaceChain(info, HDRProcessorLibplacebo)
 
 	if !strings.Contains(chain, "libplacebo=") {
 		t.Fatalf("expected HDR colorspace chain to use libplacebo, got %q", chain)
@@ -446,7 +446,7 @@ func TestBuildColorspaceChainForHDR(t *testing.T) {
 
 func TestBuildColorspaceChainForDolbyVision(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|dolby_vision=1|dv_profile=8|"
-	chain := buildColorspaceChain(info, true)
+	chain := buildColorspaceChain(info, HDRProcessorLibplacebo)
 
 	if !strings.Contains(chain, "libplacebo=") {
 		t.Fatalf("expected Dolby Vision colorspace chain to use libplacebo, got %q", chain)
@@ -462,9 +462,21 @@ func TestBuildColorspaceChainForDolbyVision(t *testing.T) {
 	}
 }
 
+func TestBuildColorspaceChainForDolbyVisionWithZscale(t *testing.T) {
+	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|dolby_vision=1|dv_profile=8|"
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
+
+	if !strings.Contains(chain, "tonemap=mobius") {
+		t.Fatalf("expected Dolby Vision zscale chain to keep the legacy tonemap path, got %q", chain)
+	}
+	if strings.Contains(chain, "libplacebo=") {
+		t.Fatalf("did not expect Dolby Vision zscale chain to use libplacebo, got %q", chain)
+	}
+}
+
 func TestBuildColorspaceChainForSDR(t *testing.T) {
 	info := "color_primaries=bt709|color_space=bt709|color_transfer=bt709|"
-	chain := buildColorspaceChain(info, true)
+	chain := buildColorspaceChain(info, HDRProcessorLibplacebo)
 
 	if chain != "" {
 		t.Fatalf("expected SDR colorspace chain to be empty, got %q", chain)
@@ -473,7 +485,7 @@ func TestBuildColorspaceChainForSDR(t *testing.T) {
 
 func TestBuildColorspaceChainFallbackWithoutLibplacebo(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|"
-	chain := buildColorspaceChain(info, false)
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
 
 	if !strings.Contains(chain, "tonemap=mobius") {
 		t.Fatalf("expected fallback HDR colorspace chain to use existing zscale/tonemap path, got %q", chain)

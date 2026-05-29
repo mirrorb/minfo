@@ -37,6 +37,16 @@ func NormalizeSubtitleMode(raw string) string {
 	}
 }
 
+// NormalizeHDRProcessor 规范化 HDR / Dolby Vision 处理器选项；未知值会回落为 libplacebo。
+func NormalizeHDRProcessor(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case HDRProcessorZscale:
+		return HDRProcessorZscale
+	default:
+		return HDRProcessorLibplacebo
+	}
+}
+
 // NormalizeCount 规范化截图数量，并限制在允许范围内。
 func NormalizeCount(raw string) int {
 	value := strings.TrimSpace(raw)

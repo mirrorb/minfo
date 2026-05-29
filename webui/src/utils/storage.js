@@ -5,6 +5,7 @@ const DEFAULT_STATE = {
     browserDir: "",
     screenshotVariant: "png",
     screenshotSubtitleMode: "auto",
+    screenshotHDRProcessor: "libplacebo",
     screenshotCount: 4,
     bdinfoMode: "code",
 };
@@ -84,6 +85,7 @@ function normalizeState(value) {
         browserDir: typeof source.browserDir === "string" ? source.browserDir : DEFAULT_STATE.browserDir,
         screenshotVariant: normalizeVariant(source.screenshotVariant),
         screenshotSubtitleMode: normalizeSubtitleMode(source.screenshotSubtitleMode),
+        screenshotHDRProcessor: normalizeHDRProcessor(source.screenshotHDRProcessor),
         screenshotCount: normalizeScreenshotCount(source.screenshotCount),
         bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
     };
@@ -141,6 +143,10 @@ function normalizeTaskPanel(value) {
 
 function normalizeSubtitleMode(value) {
     return value === "off" ? "off" : DEFAULT_STATE.screenshotSubtitleMode;
+}
+
+function normalizeHDRProcessor(value) {
+    return value === "zscale" ? "zscale" : DEFAULT_STATE.screenshotHDRProcessor;
 }
 
 function normalizeBDInfoMode(value) {

@@ -49,6 +49,7 @@ func (j *screenshotJob) run() {
 			tempDir,
 			j.variant,
 			j.subtitleMode,
+			j.hdrProcessor,
 			j.count,
 			j.logger.LogLine,
 			func(item screenshot.UploadedImage) {
@@ -61,7 +62,7 @@ func (j *screenshotJob) run() {
 		}
 		j.succeed(result.Output, "", buildTransportImageLinkItems(result.Items), result.LossyPNGFiles, result.LossyPNGIndexes)
 	default:
-		downloadURL, _, err := prepareScreenshotZipDownload(ctx, j.inputPath, tempDir, j.variant, j.subtitleMode, j.count, j.logger.LogLine)
+		downloadURL, _, err := prepareScreenshotZipDownload(ctx, j.inputPath, tempDir, j.variant, j.subtitleMode, j.hdrProcessor, j.count, j.logger.LogLine)
 		if err != nil {
 			j.fail(err)
 			return

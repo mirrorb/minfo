@@ -21,7 +21,7 @@ type resolvedScreenshotSources struct {
 }
 
 // runEngineScreenshotsWithLiveLogs 会解析输入源、生成随机时间点，并启动带实时日志的截图引擎流程。
-func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode string, count int, onLog LogHandler) (ScreenshotsResult, error) {
+func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, count int, onLog LogHandler) (ScreenshotsResult, error) {
 	sources, err := resolveScreenshotSources(ctx, inputPath, onLog)
 	if err != nil {
 		return ScreenshotsResult{}, err
@@ -33,7 +33,7 @@ func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir,
 		return ScreenshotsResult{}, err
 	}
 
-	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, timestamps, onLog)
+	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, timestamps, onLog)
 }
 
 // resolveScreenshotSources 会把外部输入路径解析为截图主媒体源和 DVD 附加探测源。
@@ -78,8 +78,8 @@ func generateScreenshotTimestamps(ctx context.Context, sourcePath string, count 
 }
 
 // runScreenshotsFromSource 会基于已经解析好的媒体源创建运行器，并执行一次完整截图任务。
-func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
-	runner := newScreenshotRunner(ctx, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, onLog)
+func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
+	runner := newScreenshotRunner(ctx, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, onLog)
 	defer runner.cleanupTemporarySubtitleResources()
 
 	runner.logRuntimeBootstrap()
@@ -99,9 +99,10 @@ func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath,
 }
 
 // newScreenshotRunner 会基于入口参数创建一份新的截图运行器。
-func newScreenshotRunner(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode string, onLog LogHandler) *screenshotRunner {
+func newScreenshotRunner(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor string, onLog LogHandler) *screenshotRunner {
 	normalizedVariant := NormalizeVariant(variant)
 	normalizedSubtitleMode := NormalizeSubtitleMode(subtitleMode)
+	normalizedHDRProcessor := NormalizeHDRProcessor(hdrProcessor)
 	return &screenshotRunner{
 		ctx:              ctx,
 		sourcePath:       sourcePath,
@@ -109,6 +110,7 @@ func newScreenshotRunner(ctx context.Context, sourcePath, dvdMediaInfoPath, outp
 		outputDir:        outputDir,
 		variant:          normalizedVariant,
 		subtitleMode:     normalizedSubtitleMode,
+		hdrProcessor:     normalizedHDRProcessor,
 		settings:         screenshotruntime.VariantSettingsFor(normalizedVariant),
 		subtitle: screenshotruntime.SubtitleSelection{
 			Mode: "none",

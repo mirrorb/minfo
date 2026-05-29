@@ -159,20 +159,28 @@ func (r *screenshotRunner) prepareBitmapSubtitleCanvas() {
 // prepareColorspaceState 会探测色彩信息并决定是否优先启用 libplacebo。
 func (r *screenshotRunner) prepareColorspaceState() {
 	r.render.ColorInfo = r.detectColorspace()
-	if !shouldPreferLibplaceboColorspace(r.render.ColorInfo) {
+	if !shouldUseAdvancedColorspaceChain(r.render.ColorInfo) {
 		return
 	}
 
-	r.tools.LibplaceboReady = true
-	r.logf("[信息] HDR/Dolby Vision 主截图将优先尝试使用 libplacebo 处理。")
+	if r.requestedHDRProcessor() == HDRProcessorLibplacebo {
+		r.tools.LibplaceboReady = true
+		r.logf("[信息] HDR/Dolby Vision 主截图将优先尝试使用 libplacebo 处理。")
+		if r.requiresTextSubtitleFilter() {
+			r.logf("[信息] 文字字幕场景将优先尝试先执行 libplacebo 色彩映射，再交给 libass 渲染字幕。")
+		}
+		return
+	}
+
+	r.logf("[信息] HDR/Dolby Vision 主截图将使用 zscale / tonemap 兼容链处理。")
 	if r.requiresTextSubtitleFilter() {
-		r.logf("[信息] 文字字幕场景将优先尝试先执行 libplacebo 色彩映射，再交给 libass 渲染字幕。")
+		r.logf("[信息] 文字字幕场景将先执行 zscale / tonemap 色彩映射，再交给 libass 渲染字幕。")
 	}
 }
 
 // finalizeRenderPreparation 会生成最终色彩链，并输出截图前的统一摘要日志。
 func (r *screenshotRunner) finalizeRenderPreparation() {
-	r.render.ColorChain = buildColorspaceChain(r.render.ColorInfo, r.tools.LibplaceboReady)
+	r.render.ColorChain = buildColorspaceChain(r.render.ColorInfo, r.effectiveHDRProcessor())
 	r.logColorspacePlan()
 	r.logProgressPercent("准备", 100, "画面参数准备完成。")
 	r.logf("[信息] 容器起始偏移：%.3fs | 影片总时长：%s", r.media.StartOffset, screenshottimestamps.SecToHMS(r.media.Duration))
@@ -193,7 +201,28 @@ func (r *screenshotRunner) logColorspacePlan() {
 		r.logf("[信息] HDR/WCG 主截图将统一应用 libplacebo tone mapping / 色域映射。")
 		return
 	}
+	if r.usesZscaleColorspace() {
+		r.logf("[信息] HDR/WCG 主截图将统一应用 zscale tone mapping / 色域映射。")
+		return
+	}
 	r.logf("[信息] HDR/WCG 主截图将统一应用 tone mapping / 色域映射。")
+}
+
+func (r *screenshotRunner) requestedHDRProcessor() string {
+	if r == nil {
+		return NormalizeHDRProcessor("")
+	}
+	return NormalizeHDRProcessor(r.hdrProcessor)
+}
+
+func (r *screenshotRunner) effectiveHDRProcessor() string {
+	if r == nil {
+		return NormalizeHDRProcessor("")
+	}
+	if r.tools.LibplaceboReady && r.requestedHDRProcessor() == HDRProcessorLibplacebo {
+		return HDRProcessorLibplacebo
+	}
+	return HDRProcessorZscale
 }
 
 // cleanupTemporarySubtitleResources 会在截图任务结束时清理提取出的字幕临时资源。
