@@ -537,6 +537,18 @@ func TestNormalizeMediaInfoAspectRatioMapsCommonFullscreenValue(t *testing.T) {
 	}
 }
 
+func TestPNGReencodeOutputArgsUsesDefaultCompressionLevel(t *testing.T) {
+	args := pngReencodeOutputArgs()
+	joined := strings.Join(args, " ")
+
+	if !strings.Contains(joined, "-compression_level 3") {
+		t.Fatalf("expected PNG compression level 3 in output args, got %q", joined)
+	}
+	if strings.Contains(joined, "-pred") {
+		t.Fatalf("expected PNG output args without predictor override, got %q", joined)
+	}
+}
+
 func TestBuildOxiPNGCompressionArgs(t *testing.T) {
 	args := buildOxiPNGCompressionArgs("/tmp/input.png")
 	joined := strings.Join(args, " ")

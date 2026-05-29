@@ -49,8 +49,8 @@
                             >
                                 <span class="field-help-trigger" aria-hidden="true">?</span>
                                 <span class="field-help-bubble">
-                                    <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景；但当前实现依赖软件 Vulkan，速度通常较慢。<br />
-                                    <strong>zscale</strong>：兼容性更好、速度通常更快，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准。
+                                    <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景<br />
+                                    <strong>zscale</strong>：兼容性更好，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准
                                 </span>
                             </span>
                         </div>

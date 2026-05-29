@@ -13,6 +13,8 @@ import (
 	screenshottimestamps "minfo/internal/screenshot/timestamps"
 )
 
+const defaultPNGCompressionLevel = "3"
+
 // captureScreenshot 会执行一次完整截图，并在文件过大时自动触发重编码兜底。
 func (r *screenshotRunner) captureScreenshot(aligned float64, path string) error {
 	r.activeShot.SetPhase(screenshotruntime.ActiveShotPhaseRender)
@@ -152,8 +154,7 @@ func (r *screenshotRunner) capturePGSPNGReencoded(coarseHMS string, fineSecond f
 func pngReencodeOutputArgs() []string {
 	return []string{
 		"-c:v", "png",
-		"-compression_level", "9",
-		"-pred", "mixed",
+		"-compression_level", defaultPNGCompressionLevel,
 	}
 }
 
