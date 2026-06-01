@@ -8,6 +8,7 @@ const DEFAULT_STATE = {
     screenshotHDRProcessor: "libplacebo",
     screenshotCount: 4,
     uploadProxyURL: "",
+    configExpanded: false,
     bdinfoMode: "code",
 };
 
@@ -89,6 +90,7 @@ function normalizeState(value) {
         screenshotHDRProcessor: normalizeHDRProcessor(source.screenshotHDRProcessor),
         screenshotCount: normalizeScreenshotCount(source.screenshotCount),
         uploadProxyURL: normalizeUploadProxyURL(source.uploadProxyURL),
+        configExpanded: source.configExpanded === true,
         bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
     };
 }

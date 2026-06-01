@@ -178,7 +178,7 @@ const screenshotHDRProcessor = ref(persistedState.screenshotHDRProcessor);
 const screenshotCount = ref(persistedState.screenshotCount);
 const uploadProxyURL = ref(persistedState.uploadProxyURL);
 const bdinfoMode = ref(persistedState.bdinfoMode);
-const configExpanded = ref(false);
+const configExpanded = ref(persistedState.configExpanded);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
@@ -261,8 +261,8 @@ const {
 } = mediaActions;
 
 watch(
-    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, bdinfoMode],
-    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextUploadProxyURL, nextBDInfoMode]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, configExpanded, bdinfoMode],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextUploadProxyURL, nextConfigExpanded, nextBDInfoMode]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
@@ -271,6 +271,7 @@ watch(
             screenshotHDRProcessor: nextHDRProcessor,
             screenshotCount: nextScreenshotCount,
             uploadProxyURL: nextUploadProxyURL,
+            configExpanded: nextConfigExpanded,
             bdinfoMode: nextBDInfoMode,
         });
     },
