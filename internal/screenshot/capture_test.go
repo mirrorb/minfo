@@ -466,6 +466,9 @@ func TestBuildColorspaceChainForDolbyVisionWithZscale(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|dolby_vision=1|dv_profile=8|"
 	chain := buildColorspaceChain(info, HDRProcessorZscale)
 
+	if !strings.Contains(chain, "zscale=pin=bt2020:tin=smpte2084:min=bt2020nc:p=bt2020:t=smpte2084:m=bt2020nc,zscale=t=linear:npl=203") {
+		t.Fatalf("expected Dolby Vision zscale chain to declare input colorimetry, got %q", chain)
+	}
 	if !strings.Contains(chain, "tonemap=mobius") {
 		t.Fatalf("expected Dolby Vision zscale chain to keep the legacy tonemap path, got %q", chain)
 	}
@@ -487,11 +490,50 @@ func TestBuildColorspaceChainFallbackWithoutLibplacebo(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|"
 	chain := buildColorspaceChain(info, HDRProcessorZscale)
 
+	if !strings.Contains(chain, "zscale=pin=bt2020:tin=smpte2084:min=bt2020nc:p=bt2020:t=smpte2084:m=bt2020nc,zscale=t=linear:npl=203") {
+		t.Fatalf("expected fallback HDR zscale chain to declare input colorimetry, got %q", chain)
+	}
 	if !strings.Contains(chain, "tonemap=mobius") {
 		t.Fatalf("expected fallback HDR colorspace chain to use existing zscale/tonemap path, got %q", chain)
 	}
 	if strings.Contains(chain, "libplacebo=") {
 		t.Fatalf("did not expect fallback HDR colorspace chain to use libplacebo, got %q", chain)
+	}
+}
+
+func TestBuildColorspaceChainForHLGWithZscale(t *testing.T) {
+	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=arib-std-b67|"
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
+
+	if !strings.Contains(chain, "pin=bt2020:tin=arib-std-b67:min=bt2020nc:p=bt2020:t=arib-std-b67:m=bt2020nc,zscale=t=linear") {
+		t.Fatalf("expected HLG zscale chain to declare input colorimetry, got %q", chain)
+	}
+}
+
+func TestBuildColorspaceChainForBT2020SDRDeclaresInputColorimetry(t *testing.T) {
+	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=bt709|"
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
+
+	if !strings.Contains(chain, "zscale=pin=bt2020:tin=bt709:min=bt2020nc:p=bt709:t=bt709:m=bt709") {
+		t.Fatalf("expected BT.2020 SDR zscale chain to declare input colorimetry, got %q", chain)
+	}
+}
+
+func TestBuildColorspaceChainInfersMissingBT2020MatrixForZscale(t *testing.T) {
+	info := "color_primaries=bt2020|color_transfer=smpte2084|"
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
+
+	if !strings.Contains(chain, "pin=bt2020:tin=smpte2084:min=bt2020nc") {
+		t.Fatalf("expected zscale chain to infer missing BT.2020 matrix, got %q", chain)
+	}
+}
+
+func TestBuildColorspaceChainInfersDolbyVisionZscaleInputColorimetry(t *testing.T) {
+	info := "dolby_vision=1|dv_profile=5|"
+	chain := buildColorspaceChain(info, HDRProcessorZscale)
+
+	if !strings.Contains(chain, "pin=bt2020:tin=smpte2084:min=bt2020nc") {
+		t.Fatalf("expected Dolby Vision zscale chain to infer HDR input colorimetry, got %q", chain)
 	}
 }
 

@@ -60,9 +60,9 @@ func buildColorspaceChain(info, hdrProcessor string) string {
 		// libplacebo path conservative by disabling the expensive peak detector.
 		return buildLibplaceboColorspaceChain(info)
 	case shouldUseAdvancedColorspaceChain(info):
-		return "format=yuv420p10le,zscale=t=linear:npl=203,format=gbrpf32le,tonemap=mobius:param=0.3:desat=2.0,zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
+		return buildZscaleHDRColorspaceChain(info)
 	case strings.Contains(info, "bt2020"):
-		return "zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
+		return buildZscaleBT2020SDRColorspaceChain(info)
 	default:
 		return ""
 	}
@@ -101,6 +101,124 @@ func buildLibplaceboColorspaceChain(info string) string {
 	}
 	options = append(options, "peak_detect=false")
 	return "libplacebo=" + strings.Join(options, ":")
+}
+
+// buildZscaleHDRColorspaceChain 会构建 zscale / tonemap HDR 到 SDR 的兼容链。
+func buildZscaleHDRColorspaceChain(info string) string {
+	normalizeOptions := zscaleNormalizeColorOptions(info)
+	linearOptions := []string{"t=linear", "npl=203"}
+	return "format=yuv420p10le,zscale=" + strings.Join(normalizeOptions, ":") + ",zscale=" + strings.Join(linearOptions, ":") + ",format=gbrpf32le,tonemap=mobius:param=0.3:desat=2.0,zscale=p=bt709:t=bt709:m=bt709,format=rgb24"
+}
+
+// buildZscaleBT2020SDRColorspaceChain 会构建 BT.2020 SDR 到 BT.709 的兼容链。
+func buildZscaleBT2020SDRColorspaceChain(info string) string {
+	options := zscaleInputColorOptions(info)
+	options = append(options, "p=bt709", "t=bt709", "m=bt709")
+	return "zscale=" + strings.Join(options, ":") + ",format=rgb24"
+}
+
+// zscaleInputColorOptions 会从探测元数据中提取 zscale 输入色彩标签。
+func zscaleInputColorOptions(info string) []string {
+	primaries, transfer, matrix := zscaleInputColorimetry(info)
+	options := make([]string, 0, 3)
+	if primaries != "" {
+		options = append(options, "pin="+primaries)
+	}
+	if transfer != "" {
+		options = append(options, "tin="+transfer)
+	}
+	if matrix != "" {
+		options = append(options, "min="+matrix)
+	}
+	return options
+}
+
+// zscaleNormalizeColorOptions 会先把输入帧规范到完整色彩标签，避免 zimg 无法建图。
+func zscaleNormalizeColorOptions(info string) []string {
+	primaries, transfer, matrix := zscaleInputColorimetry(info)
+	options := zscaleInputColorOptions(info)
+	if primaries != "" {
+		options = append(options, "p="+primaries)
+	}
+	if transfer != "" {
+		options = append(options, "t="+transfer)
+	}
+	if matrix != "" {
+		options = append(options, "m="+matrix)
+	}
+	return options
+}
+
+func zscaleInputColorimetry(info string) (string, string, string) {
+	fields := parseColorspaceInfoFields(info)
+	primaries := zscalePrimariesName(fields["color_primaries"])
+	transfer := zscaleTransferName(fields["color_transfer"])
+	matrix := zscaleMatrixName(fields["color_space"])
+	advanced := shouldUseAdvancedColorspaceChain(info)
+
+	if primaries == "" && (strings.Contains(info, "bt2020") || advanced) {
+		primaries = "bt2020"
+	}
+	if transfer == "" {
+		switch {
+		case strings.Contains(info, "smpte2084"):
+			transfer = "smpte2084"
+		case strings.Contains(info, "arib-std-b67"):
+			transfer = "arib-std-b67"
+		case strings.Contains(info, "dolby_vision=1"):
+			transfer = "smpte2084"
+		}
+	}
+	if matrix == "" && (strings.Contains(info, "bt2020") || advanced) {
+		matrix = "bt2020nc"
+	}
+	return primaries, transfer, matrix
+}
+
+func parseColorspaceInfoFields(info string) map[string]string {
+	fields := make(map[string]string)
+	for _, part := range strings.Split(info, "|") {
+		key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" || value == "unknown" || value == "unspecified" {
+			continue
+		}
+		fields[key] = value
+	}
+	return fields
+}
+
+func zscalePrimariesName(value string) string {
+	switch value {
+	case "bt709", "bt2020", "smpte170m", "smpte240m", "film", "smpte431", "smpte432":
+		return value
+	default:
+		return ""
+	}
+}
+
+func zscaleTransferName(value string) string {
+	switch value {
+	case "bt709", "smpte2084", "arib-std-b67", "linear", "iec61966-2-1", "bt2020-10", "bt2020-12":
+		return value
+	default:
+		return ""
+	}
+}
+
+func zscaleMatrixName(value string) string {
+	switch value {
+	case "bt709", "bt2020nc", "bt2020c", "smpte170m", "smpte240m", "gbr":
+		return value
+	case "rgb":
+		return "gbr"
+	default:
+		return ""
+	}
 }
 
 // parseColorspaceProbeJSON 会解析 ffprobe JSON 输出中的色彩空间和杜比视界元数据。
