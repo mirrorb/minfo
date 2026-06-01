@@ -11,7 +11,7 @@ import {
 import { clearActiveTask, loadActiveTask, saveActiveTask } from "../utils/storage";
 import { buildBBCodeText, buildCopyText, buildLinkText, copyText, extractDirectLinks, mergeOutputLinks } from "../utils/output";
 
-export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, hasInput) {
+export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, hasInput) {
     const outputText = ref("");
     const linkItems = ref([]);
     const busy = ref(false);
@@ -380,7 +380,15 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
             let trackedTask = baseTask;
             if (jobId === "") {
-                const job = await createScreenshotJob(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotHDRProcessor.value, screenshotCount.value, "links");
+                const job = await createScreenshotJob(
+                    path.value.trim(),
+                    screenshotVariant.value,
+                    screenshotSubtitleMode.value,
+                    screenshotHDRProcessor.value,
+                    screenshotCount.value,
+                    "links",
+                    uploadProxyURL.value.trim(),
+                );
                 applyLinkProgress(action, job.status, job.progress);
                 trackedTask = {
                     ...baseTask,

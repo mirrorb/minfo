@@ -38,6 +38,7 @@ type screenshotJob struct {
 	subtitleMode    string
 	hdrProcessor    string
 	count           int
+	proxyURL        string
 	status          string
 	output          string
 	downloadURL     string
@@ -75,6 +76,7 @@ func createScreenshotJob(request screenshotRequest) (*screenshotJob, error) {
 		subtitleMode: request.SubtitleMode,
 		hdrProcessor: request.HDRProcessor,
 		count:        request.Count,
+		proxyURL:     request.ProxyURL,
 		status:       screenshotJobStatusPending,
 		createdAt:    now,
 		updatedAt:    now,

@@ -17,6 +17,11 @@ type UploadItemHandler func(item UploadedImage)
 // LogHandler 处理上传流程产生的单行实时日志。
 type LogHandler = screenshotruntime.LineHandler
 
+// UploadOptions 表示图床上传时的可选运行参数。
+type UploadOptions struct {
+	ProxyURL string
+}
+
 // Result 表示一次 Pixhost 上传批次返回的直链、日志和图片结果。
 type Result struct {
 	Output       string

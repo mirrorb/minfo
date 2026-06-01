@@ -21,58 +21,84 @@
             />
 
             <div class="panel-section">
-                <div class="panel-section-header">
+                <div class="panel-section-header config-section-header">
                     <label>配置</label>
+                    <button
+                        class="config-toggle icon-btn ghost"
+                        type="button"
+                        :aria-expanded="configExpanded"
+                        aria-controls="config-panel"
+                        :aria-label="configExpanded ? '收起配置' : '展开配置'"
+                        @click="configExpanded = !configExpanded"
+                    >
+                        <span aria-hidden="true">{{ configExpanded ? "⌃" : "⌄" }}</span>
+                    </button>
                 </div>
-                <div class="config-grid">
-                    <div class="field">
-                        <label class="field-label-muted">截图模式</label>
-                        <ScreenshotVariantPicker v-model="screenshotVariant" :busy="busy" />
-                    </div>
-
-                    <div class="field">
-                        <label class="field-label-muted">BDInfo 输出</label>
-                        <BDInfoOutputPicker v-model="bdinfoMode" :busy="busy" />
-                    </div>
-                    <div class="field">
-                        <label class="field-label-muted">字幕处理</label>
-                        <ScreenshotSubtitleModePicker v-model="screenshotSubtitleMode" :busy="busy" />
-                    </div>
-                    <div class="field">
-                        <div class="field-label-with-help">
-                            <label class="field-label-muted">HDR / DV 色彩空间转换</label>
-                            <span
-                                class="field-help"
-                                tabindex="0"
-                                role="note"
-                                aria-label="查看 HDR / DV 色彩空间转换说明"
-                            >
-                                <span class="field-help-trigger" aria-hidden="true">?</span>
-                                <span class="field-help-bubble">
-                                    <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景<br />
-                                    <strong>zscale</strong>：兼容性更好，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准
-                                </span>
-                            </span>
+                <Transition name="config-collapse">
+                    <div id="config-panel" v-show="configExpanded" class="config-grid">
+                        <div class="field">
+                            <label class="field-label-muted">截图模式</label>
+                            <ScreenshotVariantPicker v-model="screenshotVariant" :busy="busy" />
                         </div>
-                        <ScreenshotHDRProcessorPicker v-model="screenshotHDRProcessor" :busy="busy" />
+
+                        <div class="field">
+                            <label class="field-label-muted">BDInfo 输出</label>
+                            <BDInfoOutputPicker v-model="bdinfoMode" :busy="busy" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label-muted">字幕处理</label>
+                            <ScreenshotSubtitleModePicker v-model="screenshotSubtitleMode" :busy="busy" />
+                        </div>
+                        <div class="field">
+                            <div class="field-label-with-help">
+                                <label class="field-label-muted">HDR / DV 色彩空间转换</label>
+                                <span
+                                    class="field-help"
+                                    tabindex="0"
+                                    role="note"
+                                    aria-label="查看 HDR / DV 色彩空间转换说明"
+                                >
+                                    <span class="field-help-trigger" aria-hidden="true">?</span>
+                                    <span class="field-help-bubble">
+                                        <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景<br />
+                                        <strong>zscale</strong>：兼容性更好，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准
+                                    </span>
+                                </span>
+                            </div>
+                            <ScreenshotHDRProcessorPicker v-model="screenshotHDRProcessor" :busy="busy" />
+                        </div>
+                        <div class="field">
+                            <label for="screenshot-count" class="field-label-muted">截图数量</label>
+                            <input
+                                id="screenshot-count"
+                                class="config-number-input"
+                                type="number"
+                                inputmode="numeric"
+                                min="1"
+                                max="10"
+                                step="1"
+                                :disabled="busy"
+                                :value="screenshotCount"
+                                @input="handleScreenshotCountInput"
+                                @blur="handleScreenshotCountBlur"
+                            />
+                        </div>
+                        <div class="field config-field-wide">
+                            <label for="upload-proxy-url" class="field-label-muted">图床代理</label>
+                            <input
+                                id="upload-proxy-url"
+                                v-model="uploadProxyURL"
+                                class="config-text-input"
+                                type="text"
+                                inputmode="url"
+                                autocomplete="off"
+                                spellcheck="false"
+                                placeholder="http://宿主机网关IP:7890"
+                                :disabled="busy"
+                            />
+                        </div>
                     </div>
-                    <div class="field">
-                        <label for="screenshot-count" class="field-label-muted">截图数量</label>
-                        <input
-                            id="screenshot-count"
-                            class="config-number-input"
-                            type="number"
-                            inputmode="numeric"
-                            min="1"
-                            max="10"
-                            step="1"
-                            :disabled="busy"
-                            :value="screenshotCount"
-                            @input="handleScreenshotCountInput"
-                            @blur="handleScreenshotCountBlur"
-                        />
-                    </div>
-                </div>
+                </Transition>
             </div>
 
             <div class="panel-section panel-section-actions">
@@ -150,12 +176,22 @@ const screenshotVariant = ref(persistedState.screenshotVariant);
 const screenshotSubtitleMode = ref(persistedState.screenshotSubtitleMode);
 const screenshotHDRProcessor = ref(persistedState.screenshotHDRProcessor);
 const screenshotCount = ref(persistedState.screenshotCount);
+const uploadProxyURL = ref(persistedState.uploadProxyURL);
 const bdinfoMode = ref(persistedState.bdinfoMode);
+const configExpanded = ref(false);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
 });
-const mediaActions = useMediaActions(pathBrowser.path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, pathBrowser.hasInput);
+const mediaActions = useMediaActions(
+    pathBrowser.path,
+    screenshotVariant,
+    screenshotSubtitleMode,
+    screenshotHDRProcessor,
+    screenshotCount,
+    uploadProxyURL,
+    pathBrowser.hasInput,
+);
 
 const clampScreenshotCount = (value) => {
     const parsed = Number.parseInt(`${value ?? ""}`.trim(), 10);
@@ -225,8 +261,8 @@ const {
 } = mediaActions;
 
 watch(
-    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, bdinfoMode],
-    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextBDInfoMode]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, bdinfoMode],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextUploadProxyURL, nextBDInfoMode]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
@@ -234,6 +270,7 @@ watch(
             screenshotSubtitleMode: nextSubtitleMode,
             screenshotHDRProcessor: nextHDRProcessor,
             screenshotCount: nextScreenshotCount,
+            uploadProxyURL: nextUploadProxyURL,
             bdinfoMode: nextBDInfoMode,
         });
     },

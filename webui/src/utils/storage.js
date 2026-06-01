@@ -7,6 +7,7 @@ const DEFAULT_STATE = {
     screenshotSubtitleMode: "auto",
     screenshotHDRProcessor: "libplacebo",
     screenshotCount: 4,
+    uploadProxyURL: "",
     bdinfoMode: "code",
 };
 
@@ -87,6 +88,7 @@ function normalizeState(value) {
         screenshotSubtitleMode: normalizeSubtitleMode(source.screenshotSubtitleMode),
         screenshotHDRProcessor: normalizeHDRProcessor(source.screenshotHDRProcessor),
         screenshotCount: normalizeScreenshotCount(source.screenshotCount),
+        uploadProxyURL: normalizeUploadProxyURL(source.uploadProxyURL),
         bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
     };
 }
@@ -159,6 +161,10 @@ function normalizeScreenshotCount(value) {
         return DEFAULT_STATE.screenshotCount;
     }
     return Math.min(10, Math.max(1, parsed));
+}
+
+function normalizeUploadProxyURL(value) {
+    return typeof value === "string" ? value.trim() : DEFAULT_STATE.uploadProxyURL;
 }
 
 function isStorageAvailable() {

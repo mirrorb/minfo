@@ -5,11 +5,15 @@ package pixhost
 import (
 	"context"
 	"errors"
-	"net/http"
 )
 
 // UploadImages 会过滤可上传图片，逐个上传到 Pixhost，并返回整理后的直链文本和日志。
 func UploadImages(ctx context.Context, files, lossyFiles []string, maxUploadBytes int64, onLog LogHandler, onItem UploadItemHandler) (Result, error) {
+	return UploadImagesWithOptions(ctx, files, lossyFiles, maxUploadBytes, UploadOptions{}, onLog, onItem)
+}
+
+// UploadImagesWithOptions 会按指定选项过滤可上传图片并上传到 Pixhost。
+func UploadImagesWithOptions(ctx context.Context, files, lossyFiles []string, maxUploadBytes int64, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (Result, error) {
 	images := collectUploadableImages(files, maxUploadBytes)
 	batch := newUploadBatch(lossyFiles, onLog, onItem)
 	if len(images) == 0 {
@@ -18,7 +22,11 @@ func UploadImages(ctx context.Context, files, lossyFiles []string, maxUploadByte
 	}
 
 	batch.appendLog("开始处理 %d 个文件...", len(images))
-	client := &http.Client{}
+	client, err := newHTTPClient(options)
+	if err != nil {
+		batch.appendLog("代理设置无效: %s", err.Error())
+		return Result{Logs: batch.logs()}, err
+	}
 	apiURL := endpoint()
 	for _, imagePath := range images {
 		directURL, err := uploadSingleImage(ctx, client, apiURL, imagePath)

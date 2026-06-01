@@ -41,6 +41,9 @@ type UploadedImage = screenshotpixhost.UploadedImage
 // UploadItemHandler 处理图床上传过程中单张已完成图片的实时回调。
 type UploadItemHandler = screenshotpixhost.UploadItemHandler
 
+// UploadOptions 表示图床上传时的可选运行参数。
+type UploadOptions = screenshotpixhost.UploadOptions
+
 // UploadResult 表示一次截图上传流程返回的直链文本和日志。
 type UploadResult struct {
 	Output          string

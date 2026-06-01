@@ -3,8 +3,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/screenshot"
@@ -19,6 +22,7 @@ type screenshotRequest struct {
 	SubtitleMode string
 	HDRProcessor string
 	Count        int
+	ProxyURL     string
 }
 
 // screenshotRunOptions 表示截图流程真正执行时需要的规格化选项。
@@ -36,6 +40,12 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 		return screenshotRequest{}, err
 	}
 
+	proxyURL, err := normalizeProxyURL(r.FormValue("proxy_url"))
+	if err != nil {
+		cleanup()
+		return screenshotRequest{}, err
+	}
+
 	options := normalizeScreenshotFormOptions(r)
 	return screenshotRequest{
 		Mode:         screenshot.NormalizeMode(r.FormValue("mode")),
@@ -45,6 +55,7 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 		SubtitleMode: options.SubtitleMode,
 		HDRProcessor: options.HDRProcessor,
 		Count:        options.Count,
+		ProxyURL:     proxyURL,
 	}, nil
 }
 
@@ -71,4 +82,27 @@ func normalizeScreenshotQueryOptions(r *http.Request) screenshotRunOptions {
 // createScreenshotTempDir 会为一次截图任务创建独立临时目录。
 func createScreenshotTempDir(pattern string) (string, error) {
 	return os.MkdirTemp("", pattern)
+}
+
+// normalizeProxyURL 校验前端传入的图床代理地址；空值表示使用服务端默认代理环境。
+func normalizeProxyURL(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", nil
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("代理地址无效: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("代理地址无效")
+	}
+
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "socks5":
+		return parsed.String(), nil
+	default:
+		return "", fmt.Errorf("代理地址协议不支持: %s", parsed.Scheme)
+	}
 }

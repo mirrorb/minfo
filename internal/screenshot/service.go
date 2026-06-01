@@ -49,14 +49,24 @@ func RunUploadWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, s
 	return RunUploadWithLiveEvents(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count, onLog, nil)
 }
 
+// RunUploadWithLiveLogsWithOptions 会按指定上传选项执行截图加上传流程。
+func RunUploadWithLiveLogsWithOptions(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, count int, options UploadOptions, onLog LogHandler) (UploadResult, error) {
+	return RunUploadWithLiveEventsWithOptions(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count, options, onLog, nil)
+}
+
 // RunUploadWithLiveEvents 会执行截图加上传流程，并把实时日志和已完成图片逐步暴露给调用方。
 func RunUploadWithLiveEvents(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, count int, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
+	return RunUploadWithLiveEventsWithOptions(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count, UploadOptions{}, onLog, onItem)
+}
+
+// RunUploadWithLiveEventsWithOptions 会按指定上传选项执行截图加上传流程，并逐步暴露实时事件。
+func RunUploadWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, count int, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
 	screenshotResult, err := runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count, onLog)
 	if err != nil {
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
 
-	uploadResult, err := screenshotpixhost.UploadImages(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, oversizeBytes, onLog, onItem)
+	uploadResult, err := screenshotpixhost.UploadImagesWithOptions(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, oversizeBytes, options, onLog, onItem)
 	logs := mergeUploadLogs(screenshotResult.Logs, uploadResult.Logs)
 	if err != nil {
 		return UploadResult{

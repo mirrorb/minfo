@@ -52,7 +52,17 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 	defer os.RemoveAll(tempDir)
 
 	if request.Mode == screenshot.ModeLinks {
-		result, err := screenshot.RunUploadWithLiveLogs(ctx, request.InputPath, tempDir, request.Variant, request.SubtitleMode, request.HDRProcessor, request.Count, logger.LogLine)
+		result, err := screenshot.RunUploadWithLiveLogsWithOptions(
+			ctx,
+			request.InputPath,
+			tempDir,
+			request.Variant,
+			request.SubtitleMode,
+			request.HDRProcessor,
+			request.Count,
+			screenshot.UploadOptions{ProxyURL: request.ProxyURL},
+			logger.LogLine,
+		)
 		if err != nil {
 			transport.WriteJSON(w, http.StatusInternalServerError, transport.InfoResponse{
 				OK:         false,

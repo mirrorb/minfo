@@ -43,7 +43,7 @@ func (j *screenshotJob) run() {
 
 	switch j.mode {
 	case screenshot.ModeLinks:
-		result, err := screenshot.RunUploadWithLiveEvents(
+		result, err := screenshot.RunUploadWithLiveEventsWithOptions(
 			ctx,
 			j.inputPath,
 			tempDir,
@@ -51,6 +51,7 @@ func (j *screenshotJob) run() {
 			j.subtitleMode,
 			j.hdrProcessor,
 			j.count,
+			screenshot.UploadOptions{ProxyURL: j.proxyURL},
 			j.logger.LogLine,
 			func(item screenshot.UploadedImage) {
 				j.appendLinkItem(buildTransportImageLinkItem(item))

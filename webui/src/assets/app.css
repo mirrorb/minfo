@@ -203,6 +203,22 @@ h1 {
   gap: 0;
 }
 
+.config-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-toggle {
+  flex: 0 0 auto;
+  font-size: 1rem;
+}
+
+.config-toggle span {
+  line-height: 1;
+}
+
 .config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -215,6 +231,42 @@ h1 {
 
 .config-grid .field {
   margin-bottom: 0;
+}
+
+.config-collapse-enter-active,
+.config-collapse-leave-active {
+  max-height: 760px;
+  overflow: hidden;
+  transform-origin: top;
+  transition:
+    max-height 0.22s ease,
+    opacity 0.18s ease,
+    transform 0.22s ease,
+    padding-top 0.22s ease,
+    padding-bottom 0.22s ease,
+    border-top-width 0.22s ease,
+    border-bottom-width 0.22s ease;
+}
+
+.config-collapse-enter-from,
+.config-collapse-leave-to {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.config-field-wide {
+  grid-column: 1 / -1;
+}
+
+.config-text-input {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-mono);
 }
 
 .panel-section-actions .actions {

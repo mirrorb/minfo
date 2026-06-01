@@ -36,6 +36,20 @@ func endpoint() string {
 	return config.Getenv("PIXHOST_API_URL", apiURL)
 }
 
+// newHTTPClient 构造 Pixhost 上传使用的 HTTP 客户端。
+func newHTTPClient(options UploadOptions) (*http.Client, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	proxyURL := strings.TrimSpace(options.ProxyURL)
+	if proxyURL != "" {
+		parsed, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		transport.Proxy = http.ProxyURL(parsed)
+	}
+	return &http.Client{Transport: transport}, nil
+}
+
 // uploadSingleImage 上传单张图片到 Pixhost，并把返回的缩略图地址转换成直链。
 func uploadSingleImage(ctx context.Context, client *http.Client, apiURL, imagePath string) (string, error) {
 	file, err := os.Open(imagePath)
