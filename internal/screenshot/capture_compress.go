@@ -98,7 +98,6 @@ func buildOxiPNGCompressionArgs(path string) []string {
 	return []string{
 		"-o", "max",
 		"--strip", "safe",
-		"--quiet",
 		path,
 	}
 }

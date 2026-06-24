@@ -601,6 +601,9 @@ func TestBuildOxiPNGCompressionArgs(t *testing.T) {
 	if !strings.Contains(joined, "--strip safe") {
 		t.Fatalf("expected safe metadata stripping in oxipng args, got %q", joined)
 	}
+	if strings.Contains(joined, "--quiet") {
+		t.Fatalf("expected oxipng args without quiet mode, got %q", joined)
+	}
 	if !strings.HasSuffix(joined, "/tmp/input.png") {
 		t.Fatalf("expected input path in oxipng args, got %q", joined)
 	}
