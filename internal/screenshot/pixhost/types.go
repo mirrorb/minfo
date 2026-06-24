@@ -6,9 +6,12 @@ import screenshotruntime "minfo/internal/screenshot/runtime"
 
 // UploadedImage 表示一次图床上传后返回的单张图片结果。
 type UploadedImage struct {
-	URL      string
-	Filename string
-	Size     int64
+	URL          string
+	ThumbnailURL string
+	Filename     string
+	Size         int64
+	Width        int
+	Height       int
 }
 
 // UploadItemHandler 处理图床上传过程中单张已完成图片的实时回调。

@@ -48,8 +48,11 @@ func buildTransportImageLinkItems(items []screenshot.UploadedImage) []transport.
 // buildTransportImageLinkItem 会把单个截图上传结果转换为 HTTP 响应结构。
 func buildTransportImageLinkItem(item screenshot.UploadedImage) transport.ImageLinkItem {
 	return transport.ImageLinkItem{
-		URL:      strings.TrimSpace(item.URL),
-		Filename: item.Filename,
-		Size:     item.Size,
+		URL:          strings.TrimSpace(item.URL),
+		ThumbnailURL: strings.TrimSpace(item.ThumbnailURL),
+		Filename:     item.Filename,
+		Size:         item.Size,
+		Width:        item.Width,
+		Height:       item.Height,
 	}
 }

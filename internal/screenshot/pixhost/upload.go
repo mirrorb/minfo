@@ -29,12 +29,12 @@ func UploadImagesWithOptions(ctx context.Context, files, lossyFiles []string, ma
 	}
 	apiURL := endpoint()
 	for _, imagePath := range images {
-		directURL, err := uploadSingleImage(ctx, client, apiURL, imagePath)
+		directURL, thumbnailURL, err := uploadSingleImage(ctx, client, apiURL, imagePath)
 		if err != nil {
 			batch.recordFailure(imagePath, err)
 			continue
 		}
-		batch.recordSuccess(imagePath, directURL)
+		batch.recordSuccess(imagePath, directURL, thumbnailURL)
 	}
 
 	return batch.finalize(len(images))

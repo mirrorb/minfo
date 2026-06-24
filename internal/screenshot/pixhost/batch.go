@@ -5,6 +5,9 @@ package pixhost
 import (
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
@@ -74,8 +77,8 @@ func (b *uploadBatch) recordFailure(imagePath string, err error) {
 	b.appendLog("上传失败: %s (%s)", filepath.Base(imagePath), err.Error())
 }
 
-// recordSuccess 会记录单张图片上传成功后的直链、元数据和实时回调。
-func (b *uploadBatch) recordSuccess(imagePath, directURL string) {
+// recordSuccess 会记录单张图片上传成功后的直链、缩略图、元数据和实时回调。
+func (b *uploadBatch) recordSuccess(imagePath, directURL, thumbnailURL string) {
 	if b == nil {
 		return
 	}
@@ -84,7 +87,7 @@ func (b *uploadBatch) recordSuccess(imagePath, directURL string) {
 	}
 
 	b.links = append(b.links, directURL)
-	item := buildUploadedImage(imagePath, directURL)
+	item := buildUploadedImage(imagePath, directURL, thumbnailURL)
 	b.items = append(b.items, item)
 	if b.onItem != nil {
 		b.onItem(item)
@@ -113,18 +116,35 @@ func (b *uploadBatch) finalize(total int) (Result, error) {
 	}, nil
 }
 
-// buildUploadedImage 会根据本地文件和直链结果构建一条可返回给前端的图片记录。
-func buildUploadedImage(imagePath, directURL string) UploadedImage {
+// buildUploadedImage 会根据本地文件、原图直链和缩略图构建一条可返回给前端的图片记录。
+func buildUploadedImage(imagePath, directURL, thumbnailURL string) UploadedImage {
 	item := UploadedImage{
-		URL:      strings.TrimSpace(directURL),
-		Filename: filepath.Base(imagePath),
+		URL:          strings.TrimSpace(directURL),
+		ThumbnailURL: strings.TrimSpace(thumbnailURL),
+		Filename:     filepath.Base(imagePath),
 	}
 
 	info, err := os.Stat(imagePath)
 	if err == nil && !info.IsDir() && info.Size() > 0 {
 		item.Size = info.Size()
 	}
+	item.Width, item.Height = readImageDimensions(imagePath)
 	return item
+}
+
+// readImageDimensions 从本地原图读取尺寸；失败时保持零值，由前端隐藏该元数据。
+func readImageDimensions(path string) (int, int) {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, 0
+	}
+	defer file.Close()
+
+	config, _, err := image.DecodeConfig(file)
+	if err != nil || config.Width <= 0 || config.Height <= 0 {
+		return 0, 0
+	}
+	return config.Width, config.Height
 }
 
 // collectUploadableImages 从路径列表中筛出可上传的图片，并按文件名排序。

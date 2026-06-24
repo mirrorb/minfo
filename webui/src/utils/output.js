@@ -68,8 +68,11 @@ export function normalizeOutputLinks(items) {
         links.push({
             id: typeof item?.id === "string" && item.id.trim() !== "" ? item.id : buildLinkId(),
             url,
+            thumbnailURL: normalizeOptionalDirectLink(item?.thumbnailURL),
             filename: typeof item?.filename === "string" ? item.filename : "",
             size: normalizeLinkSize(item?.size),
+            width: normalizeLinkDimension(item?.width),
+            height: normalizeLinkDimension(item?.height),
             isLossy: item?.isLossy === true,
             lossyTooltip: typeof item?.lossyTooltip === "string" ? item.lossyTooltip : "",
         });
@@ -98,8 +101,11 @@ export function mergeOutputLinks(existingItems, incomingLinks) {
         additions.push({
             id: buildLinkId(),
             url,
+            thumbnailURL: normalizedLink.thumbnailURL,
             filename: normalizedLink.filename,
             size: normalizedLink.size,
+            width: normalizedLink.width,
+            height: normalizedLink.height,
             isLossy: normalizedLink.isLossy,
             lossyTooltip: normalizedLink.lossyTooltip,
         });
@@ -164,8 +170,11 @@ function normalizeIncomingLink(value) {
     if (typeof value === "string") {
         return {
             url: normalizeDirectLink(value),
+            thumbnailURL: "",
             filename: "",
             size: 0,
+            width: 0,
+            height: 0,
             isLossy: false,
             lossyTooltip: "",
         };
@@ -174,8 +183,11 @@ function normalizeIncomingLink(value) {
     if (!value || typeof value !== "object") {
         return {
             url: "",
+            thumbnailURL: "",
             filename: "",
             size: 0,
+            width: 0,
+            height: 0,
             isLossy: false,
             lossyTooltip: "",
         };
@@ -183,11 +195,21 @@ function normalizeIncomingLink(value) {
 
     return {
         url: normalizeDirectLink(value.url),
+        thumbnailURL: normalizeOptionalDirectLink(value.thumbnailURL),
         filename: typeof value.filename === "string" ? value.filename.trim() : "",
         size: normalizeLinkSize(value.size),
+        width: normalizeLinkDimension(value.width),
+        height: normalizeLinkDimension(value.height),
         isLossy: value.isLossy === true,
         lossyTooltip: typeof value.lossyTooltip === "string" ? value.lossyTooltip : "",
     };
+}
+
+function normalizeOptionalDirectLink(value) {
+    if (typeof value !== "string" || value.trim() === "") {
+        return "";
+    }
+    return normalizeDirectLink(value);
 }
 
 function normalizeLinkSize(value) {
@@ -196,6 +218,14 @@ function normalizeLinkSize(value) {
         return 0;
     }
     return size;
+}
+
+function normalizeLinkDimension(value) {
+    const dimension = Number.parseInt(`${value ?? ""}`.trim(), 10);
+    if (!Number.isFinite(dimension) || dimension <= 0) {
+        return 0;
+    }
+    return dimension;
 }
 
 function buildLinkId() {

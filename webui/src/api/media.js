@@ -194,10 +194,21 @@ function normalizeLinkItems(items) {
         .filter((item) => item && typeof item === "object")
         .map((item) => ({
             url: typeof item.url === "string" ? item.url : "",
+            thumbnailURL: typeof item.thumbnail_url === "string" ? item.thumbnail_url : "",
             filename: typeof item.filename === "string" ? item.filename : "",
-            size: Number.isFinite(item.size) && item.size > 0 ? Math.round(item.size) : 0,
+            size: normalizePositiveInteger(item.size),
+            width: normalizePositiveInteger(item.width),
+            height: normalizePositiveInteger(item.height),
         }))
         .filter((item) => item.url.trim() !== "");
+}
+
+function normalizePositiveInteger(value) {
+    const number = Number.parseInt(`${value ?? ""}`.trim(), 10);
+    if (!Number.isFinite(number) || number <= 0) {
+        return 0;
+    }
+    return number;
 }
 
 function normalizeTaskProgress(progress) {

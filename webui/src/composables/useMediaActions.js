@@ -730,8 +730,11 @@ function decorateLossyLinkItems(links, lossyIndexes = [], lossyFiles = []) {
         const isLossy = indexSet.has(index) || isLossyFilename(filename, lossyNames);
         return {
             url: normalized.url,
+            thumbnailURL: normalized.thumbnailURL,
             filename,
             size: normalized.size,
+            width: normalized.width,
+            height: normalized.height,
             isLossy,
             lossyTooltip: isLossy ? "为满足图床要求该图片已被有损压缩" : "",
         };
@@ -742,25 +745,41 @@ function normalizeDecoratedLinkInput(value) {
     if (typeof value === "string") {
         return {
             url: value,
+            thumbnailURL: "",
             filename: "",
             size: 0,
+            width: 0,
+            height: 0,
         };
     }
 
     if (!value || typeof value !== "object") {
         return {
             url: "",
+            thumbnailURL: "",
             filename: "",
             size: 0,
+            width: 0,
+            height: 0,
         };
     }
 
-    const size = Number.parseInt(`${value.size ?? ""}`.trim(), 10);
     return {
         url: typeof value.url === "string" ? value.url : "",
+        thumbnailURL: typeof value.thumbnailURL === "string" ? value.thumbnailURL : "",
         filename: typeof value.filename === "string" ? value.filename.trim() : "",
-        size: Number.isFinite(size) && size > 0 ? size : 0,
+        size: normalizePositiveInteger(value.size),
+        width: normalizePositiveInteger(value.width),
+        height: normalizePositiveInteger(value.height),
     };
+}
+
+function normalizePositiveInteger(value) {
+    const number = Number.parseInt(`${value ?? ""}`.trim(), 10);
+    if (!Number.isFinite(number) || number <= 0) {
+        return 0;
+    }
+    return number;
 }
 
 function extractFilenameFromURL(url) {

@@ -41,11 +41,12 @@
                                 </div>
                             </div>
                             <img
+                                v-if="previewURL(item) !== ''"
                                 :class="{ error: previewStateMap[item.id] === 'error' }"
-                                :src="item.url"
+                                :src="previewURL(item)"
                                 alt="截图预览"
                                 loading="lazy"
-                                @load="handlePreviewLoad(item.id, $event)"
+                                @load="handlePreviewLoad(item.id)"
                                 @error="markError(item.id)"
                             />
                         </a>
@@ -61,8 +62,7 @@
                                     有损
                                 </span>
                                 <span v-if="item.size > 0" class="output-link-meta-item">{{ formatFileSize(item.size) }}</span>
-                                <span v-if="previewSizeMap[item.id]" class="output-link-meta-item">{{ previewSizeMap[item.id] }}</span>
-                                <span v-else-if="previewStateMap[item.id] === 'loading'" class="output-link-meta-item muted">读取尺寸中</span>
+                                <span v-if="originalDimensions(item)" class="output-link-meta-item">{{ originalDimensions(item) }}</span>
                             </div>
                             <a class="output-link-anchor" :href="item.url" target="_blank" rel="noreferrer noopener">
                                 {{ item.url }}
@@ -101,7 +101,6 @@ const props = defineProps({
 const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "clear", "remove-link"]);
 
 const previewStateMap = ref({});
-const previewSizeMap = ref({});
 const lossyTooltip = "为满足图床要求该图片已被有损压缩";
 
 const isAppendActive = computed(() => props.busy && props.activeAction === "append-links");
@@ -133,42 +132,41 @@ watch(
     () => props.linkItems,
     (items) => {
         const nextStateMap = {};
-        const nextSizeMap = {};
         for (const item of items) {
-            nextStateMap[item.id] = previewStateMap.value[item.id] || "loading";
-            if (previewSizeMap.value[item.id]) {
-                nextSizeMap[item.id] = previewSizeMap.value[item.id];
-            }
+            nextStateMap[item.id] = previewURL(item) === "" ? "error" : previewStateMap.value[item.id] || "loading";
         }
         previewStateMap.value = nextStateMap;
-        previewSizeMap.value = nextSizeMap;
     },
     { immediate: true, deep: true },
 );
 
-const handlePreviewLoad = (id, event) => {
-    const width = Number.parseInt(`${event?.target?.naturalWidth ?? ""}`.trim(), 10);
-    const height = Number.parseInt(`${event?.target?.naturalHeight ?? ""}`.trim(), 10);
+const previewURL = (item) => {
+    if (typeof item?.thumbnailURL === "string" && item.thumbnailURL.trim() !== "") {
+        return item.thumbnailURL;
+    }
+    return "";
+};
+
+const originalDimensions = (item) => {
+    const width = Number.parseInt(`${item?.width ?? ""}`.trim(), 10);
+    const height = Number.parseInt(`${item?.height ?? ""}`.trim(), 10);
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        return "";
+    }
+    return `${width} × ${height}`;
+};
+
+const handlePreviewLoad = (id) => {
     previewStateMap.value = {
         ...previewStateMap.value,
         [id]: "loaded",
     };
-    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
-        previewSizeMap.value = {
-            ...previewSizeMap.value,
-            [id]: `${width} × ${height}`,
-        };
-    }
 };
 
 const markError = (id) => {
     previewStateMap.value = {
         ...previewStateMap.value,
         [id]: "error",
-    };
-    previewSizeMap.value = {
-        ...previewSizeMap.value,
-        [id]: "",
     };
 };
 </script>

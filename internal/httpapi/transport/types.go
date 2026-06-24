@@ -10,9 +10,12 @@ type LogEntry struct {
 
 // ImageLinkItem 表示图床返回的一张图片及其元信息。
 type ImageLinkItem struct {
-	URL      string `json:"url,omitempty"`
-	Filename string `json:"filename,omitempty"`
-	Size     int64  `json:"size,omitempty"`
+	URL          string `json:"url,omitempty"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	Filename     string `json:"filename,omitempty"`
+	Size         int64  `json:"size,omitempty"`
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
 }
 
 // TaskProgress 表示后台任务当前阶段对应的进度信息。
