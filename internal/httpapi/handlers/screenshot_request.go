@@ -11,6 +11,7 @@ import (
 
 	"minfo/internal/httpapi/transport"
 	"minfo/internal/screenshot"
+	screenshottimestamps "minfo/internal/screenshot/timestamps"
 )
 
 // screenshotRequest 表示一次截图表单请求解析后的完整运行参数。
@@ -23,6 +24,7 @@ type screenshotRequest struct {
 	HDRProcessor string
 	Count        int
 	ProxyURL     string
+	Timestamps   []string
 }
 
 // screenshotRunOptions 表示截图流程真正执行时需要的规格化选项。
@@ -47,6 +49,15 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 	}
 
 	options := normalizeScreenshotFormOptions(r)
+	timestamps, err := normalizeScreenshotFormTimestamps(r)
+	if err != nil {
+		cleanup()
+		return screenshotRequest{}, err
+	}
+	if len(timestamps) > 0 {
+		options.Count = len(timestamps)
+	}
+
 	return screenshotRequest{
 		Mode:         screenshot.NormalizeMode(r.FormValue("mode")),
 		InputPath:    inputPath,
@@ -56,6 +67,7 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 		HDRProcessor: options.HDRProcessor,
 		Count:        options.Count,
 		ProxyURL:     proxyURL,
+		Timestamps:   timestamps,
 	}, nil
 }
 
@@ -77,6 +89,42 @@ func normalizeScreenshotQueryOptions(r *http.Request) screenshotRunOptions {
 		HDRProcessor: screenshot.NormalizeHDRProcessor(r.URL.Query().Get("hdr_processor")),
 		Count:        screenshot.NormalizeCount(r.URL.Query().Get("count")),
 	}
+}
+
+// normalizeScreenshotFormTimestamps 会提取可选的指定截图时间点。
+func normalizeScreenshotFormTimestamps(r *http.Request) ([]string, error) {
+	values := make([]string, 0)
+	if r != nil && r.Form != nil {
+		values = append(values, r.Form["timestamp"]...)
+		for _, value := range r.Form["timestamps"] {
+			values = append(values, splitScreenshotTimestampList(value)...)
+		}
+	}
+
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	if len(result) > 10 {
+		return nil, fmt.Errorf("截图时间点数量不能超过 10 个")
+	}
+	if _, err := screenshottimestamps.ParseRequestedTimestamps(result); err != nil {
+		return nil, fmt.Errorf("截图时间点无效: %w", err)
+	}
+	return result, nil
+}
+
+func splitScreenshotTimestampList(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	})
 }
 
 // createScreenshotTempDir 会为一次截图任务创建独立临时目录。

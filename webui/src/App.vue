@@ -146,6 +146,7 @@
             @copy-bbcode="copyBBCode"
             @clear="clearLinkItems"
             @remove-link="removeLink"
+            @rerender-jpg="rerenderLossyLinkAsJPG"
         />
 
     </main>
@@ -258,6 +259,7 @@ const {
     copyLinks,
     copyBBCode,
     removeLink,
+    rerenderLossyLinkAsJPG,
 } = mediaActions;
 
 watch(

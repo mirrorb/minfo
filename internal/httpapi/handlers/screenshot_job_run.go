@@ -43,20 +43,38 @@ func (j *screenshotJob) run() {
 
 	switch j.mode {
 	case screenshot.ModeLinks:
-		result, err := screenshot.RunUploadWithLiveEventsWithOptions(
-			ctx,
-			j.inputPath,
-			tempDir,
-			j.variant,
-			j.subtitleMode,
-			j.hdrProcessor,
-			j.count,
-			screenshot.UploadOptions{ProxyURL: j.proxyURL},
-			j.logger.LogLine,
-			func(item screenshot.UploadedImage) {
-				j.appendLinkItem(buildTransportImageLinkItem(item))
-			},
-		)
+		uploadOptions := screenshot.UploadOptions{ProxyURL: j.proxyURL}
+		onItem := func(item screenshot.UploadedImage) {
+			j.appendLinkItem(buildTransportImageLinkItem(item))
+		}
+		var result screenshot.UploadResult
+		if len(j.timestamps) > 0 {
+			result, err = screenshot.RunUploadAtTimestampsWithLiveEventsWithOptions(
+				ctx,
+				j.inputPath,
+				tempDir,
+				j.variant,
+				j.subtitleMode,
+				j.hdrProcessor,
+				j.timestamps,
+				uploadOptions,
+				j.logger.LogLine,
+				onItem,
+			)
+		} else {
+			result, err = screenshot.RunUploadWithLiveEventsWithOptions(
+				ctx,
+				j.inputPath,
+				tempDir,
+				j.variant,
+				j.subtitleMode,
+				j.hdrProcessor,
+				j.count,
+				uploadOptions,
+				j.logger.LogLine,
+				onItem,
+			)
+		}
 		if err != nil {
 			j.fail(err)
 			return

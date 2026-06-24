@@ -135,6 +135,7 @@ function normalizeTaskAction(value) {
         case "download-shots":
         case "output-links":
         case "append-links":
+        case "rerender-jpg":
             return value;
         default:
             return "";

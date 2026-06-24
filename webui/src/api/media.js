@@ -50,7 +50,7 @@ export async function cancelInfoJob(jobId) {
     return data;
 }
 
-export async function createScreenshotJob(path, variant, subtitleMode, hdrProcessor, count, mode, proxyURL = "") {
+export async function createScreenshotJob(path, variant, subtitleMode, hdrProcessor, count, mode, proxyURL = "", timestamps = []) {
     const response = await postForm("/api/screenshot-jobs", {
         path,
         mode,
@@ -59,6 +59,7 @@ export async function createScreenshotJob(path, variant, subtitleMode, hdrProces
         hdr_processor: hdrProcessor,
         count,
         proxy_url: proxyURL,
+        timestamp: Array.isArray(timestamps) ? timestamps : [],
     });
     const data = normalizeScreenshotJobPayload(await safeReadJSON(response));
     if (!response.ok || !data.ok || typeof data.jobId !== "string" || data.jobId.trim() === "") {
@@ -108,6 +109,14 @@ export function startPreparedDownload(url) {
 async function postForm(url, fields = {}) {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) {
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                if (item !== undefined && item !== null && `${item}` !== "") {
+                    form.append(key, `${item}`);
+                }
+            }
+            continue;
+        }
         if (value !== undefined && value !== null && `${value}` !== "") {
             form.append(key, `${value}`);
         }

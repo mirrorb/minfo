@@ -917,8 +917,23 @@ pre {
   word-break: break-all;
 }
 
+.output-link-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.output-link-rerender,
 .output-link-delete {
   padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.output-link-rerender {
+  color: #8a3a00;
+  border-color: rgba(249, 115, 22, 0.42);
+  background: rgba(245, 158, 11, 0.16);
 }
 
 @keyframes rise {
@@ -1000,7 +1015,8 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .output-link-delete {
+  .output-link-actions {
+    flex-direction: row;
     justify-self: flex-start;
   }
 

@@ -30,6 +30,11 @@ func RunScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, varia
 	return runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count, onLog)
 }
 
+// RunScreenshotsAtTimestampsWithLiveLogs 会按指定时间点执行截图流程。
+func RunScreenshotsAtTimestampsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
+	return runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, timestamps, onLog)
+}
+
 // RunUpload 执行截图加上传流程并仅返回直链输出。
 func RunUpload(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, count int) (string, error) {
 	result, err := RunUploadWithLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, count)
@@ -66,6 +71,21 @@ func RunUploadWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDi
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
 
+	return uploadScreenshotResult(ctx, screenshotResult, options, onLog, onItem)
+}
+
+// RunUploadAtTimestampsWithLiveEventsWithOptions 会按指定时间点截图并上传。
+func RunUploadAtTimestampsWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, timestamps []string, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
+	screenshotResult, err := runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, timestamps, onLog)
+	if err != nil {
+		return UploadResult{Logs: screenshotResult.Logs}, err
+	}
+
+	return uploadScreenshotResult(ctx, screenshotResult, options, onLog, onItem)
+}
+
+// uploadScreenshotResult 会上传截图结果，并合并截图与上传阶段日志。
+func uploadScreenshotResult(ctx context.Context, screenshotResult ScreenshotsResult, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
 	uploadResult, err := screenshotpixhost.UploadImagesWithOptions(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, oversizeBytes, options, onLog, onItem)
 	logs := mergeUploadLogs(screenshotResult.Logs, uploadResult.Logs)
 	if err != nil {

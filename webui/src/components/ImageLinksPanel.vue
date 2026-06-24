@@ -68,9 +68,20 @@
                                 {{ item.url }}
                             </a>
                         </div>
-                        <button class="ghost output-link-delete" type="button" :disabled="busy" @click.stop="$emit('remove-link', item.id)">
-                            删除
-                        </button>
+                        <div class="output-link-actions">
+                            <button
+                                v-if="item.isLossy"
+                                class="ghost output-link-rerender"
+                                type="button"
+                                :disabled="busy"
+                                @click.stop="$emit('rerender-jpg', item)"
+                            >
+                                重拍 JPG
+                            </button>
+                            <button class="ghost output-link-delete" type="button" :disabled="busy" @click.stop="$emit('remove-link', item.id)">
+                                删除
+                            </button>
+                        </div>
                     </article>
                 </div>
             </div>
@@ -98,7 +109,7 @@ const props = defineProps({
     taskProgress: { type: Object, default: null },
 });
 
-const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "clear", "remove-link"]);
+const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "clear", "remove-link", "rerender-jpg"]);
 
 const previewStateMap = ref({});
 const lossyTooltip = "为满足图床要求该图片已被有损压缩";

@@ -362,32 +362,35 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     };
 
-    const runLinkTask = async ({ action, jobId = "" } = {}) => {
+    const runLinkTask = async ({ action, jobId = "", variant = "", count = 0, timestamps = [], replaceItemId = "" } = {}) => {
         const previousStatusText = linkStatusText.value;
         const isAppend = action === "append-links";
-        const baseLinkItems = isAppend ? linkItems.value.map((item) => ({ ...item })) : [];
+        const isReplace = action === "rerender-jpg";
+        const baseLinkItems = isAppend || isReplace ? linkItems.value.map((item) => ({ ...item })) : [];
         const baseTask = {
             jobType: "screenshot",
             action,
             panel: "links",
             jobId,
-            logLabel: "screenshots upload",
+            logLabel: isReplace ? "screenshots rerender jpg" : "screenshots upload",
         };
 
         try {
-            activateImageLinksPanel(!isAppend);
+            activateImageLinksPanel(!isAppend && !isReplace);
             applyLinkProgress(action, "pending");
 
             let trackedTask = baseTask;
             if (jobId === "") {
+                const requestedTimestamps = normalizeTimestampList(timestamps);
                 const job = await createScreenshotJob(
                     path.value.trim(),
-                    screenshotVariant.value,
+                    variant || screenshotVariant.value,
                     screenshotSubtitleMode.value,
                     screenshotHDRProcessor.value,
-                    screenshotCount.value,
+                    count > 0 ? count : requestedTimestamps.length > 0 ? requestedTimestamps.length : screenshotCount.value,
                     "links",
                     uploadProxyURL.value.trim(),
+                    requestedTimestamps,
                 );
                 applyLinkProgress(action, job.status, job.progress);
                 trackedTask = {
@@ -399,24 +402,26 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             persistActiveTask(trackedTask);
             const result = await waitForAsyncJob(fetchScreenshotJob, trackedTask.jobId, trackedTask.logLabel, (job) => {
                 applyLinkProgress(action, job.status, job.progress);
-                applyRunningLinkItems(action, baseLinkItems, job);
+                if (!isReplace) {
+                    applyRunningLinkItems(action, baseLinkItems, job);
+                }
             });
 
             clearPersistedActiveTask();
-            applyLinkResult(action, result.output || "", result, baseLinkItems);
+            applyLinkResult(action, result.output || "", result, baseLinkItems, replaceItemId);
         } catch (err) {
             clearPersistedActiveTask();
             logTaskError(baseTask.logLabel, err);
 
             if (err?.canceled) {
                 handleCanceledLinkTask(action, previousStatusText);
-                showNotice(action === "append-links" ? "附加图床任务已取消。" : "图床任务已取消。");
+                showNotice(resolveLinkCanceledNotice(action));
                 return;
             }
 
-            if (action === "append-links") {
+            if (isAppend || isReplace) {
                 setLinkStatusText(previousStatusText);
-                showNotice(resolveTaskErrorMessage(err, "附加图床任务已失效，请重新发起。"));
+                showNotice(resolveTaskErrorMessage(err, isReplace ? "JPG 重拍任务已失效，请重新发起。" : "附加图床任务已失效，请重新发起。"));
                 return;
             }
 
@@ -462,6 +467,33 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         await runLinkTask({ action: "append-links" });
     };
 
+    const rerenderLossyLinkAsJPG = async (item) => {
+        if (busy.value) {
+            return;
+        }
+        if (!hasInput.value) {
+            showNotice("请先选择媒体路径。");
+            return;
+        }
+        if (!item?.isLossy) {
+            showNotice("只有有损压缩的 PNG 才需要重拍 JPG。");
+            return;
+        }
+
+        const timestamp = screenshotTimestampFromLinkItem(item);
+        if (timestamp === "") {
+            showNotice("无法从文件名识别截图时间点。");
+            return;
+        }
+        await runLinkTask({
+            action: "rerender-jpg",
+            variant: "jpg",
+            count: 1,
+            timestamps: [timestamp],
+            replaceItemId: item.id,
+        });
+    };
+
     const resumePersistedTask = async () => {
         const persistedTask = loadActiveTask();
         if (!persistedTask) {
@@ -483,6 +515,9 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                 return;
             case "append-links":
                 await runLinkTask({ action: "append-links", jobId: persistedTask.jobId });
+                return;
+            case "rerender-jpg":
+                await runLinkTask({ action: "rerender-jpg", jobId: persistedTask.jobId });
                 return;
             default:
                 clearPersistedActiveTask();
@@ -605,6 +640,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         downloadShots,
         outputShotLinks,
         appendShotLinks,
+        rerenderLossyLinkAsJPG,
         stopActiveTask,
         clearOutputText,
         clearLinkItems,
@@ -627,6 +663,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                 return;
             case "output-links":
             case "append-links":
+            case "rerender-jpg":
                 applyLinkProgress(task.action, status, progress);
                 return;
             default:
@@ -647,8 +684,17 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         linkItems.value = items;
     }
 
-    function applyLinkResult(action, output, result = {}, baseItems = []) {
+    function applyLinkResult(action, output, result = {}, baseItems = [], replaceItemId = "") {
         const decoratedLinks = buildDecoratedLinkItems(result, output);
+        if (action === "rerender-jpg") {
+            if (decoratedLinks.length > 0) {
+                replaceLossyLinkWithJPG(baseItems, decoratedLinks[0], replaceItemId);
+                return;
+            }
+            setLinkStatusText(output || "没有返回 JPG 图床链接。");
+            return;
+        }
+
         if (action === "append-links") {
             if (decoratedLinks.length > 0) {
                 const { items, addedCount, duplicateCount } = mergeOutputLinks(baseItems, decoratedLinks);
@@ -695,9 +741,47 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             setLinkStatusText("已取消追加图床任务。");
             return;
         }
+        if (action === "rerender-jpg") {
+            if (linkItems.value.length > 0) {
+                setLinkStatusText(previousStatusText || `已取消 JPG 重拍任务，当前共 ${linkItems.value.length} 条。`);
+                return;
+            }
+            activateImageLinksPanel(false);
+            setLinkStatusText("已取消 JPG 重拍任务。");
+            return;
+        }
 
         activateImageLinksPanel(true);
         setLinkStatusText("已取消图床任务。");
+    }
+
+    function replaceLossyLinkWithJPG(baseItems, incomingLink, replaceItemId) {
+        const { items: normalizedItems } = mergeOutputLinks([], [incomingLink]);
+        const replacement = normalizedItems[0];
+        if (!replacement) {
+            setLinkStatusText("JPG 重拍完成，但没有可用图床链接。");
+            return;
+        }
+
+        const oldIndex = baseItems.findIndex((item) => item.id === replaceItemId);
+        if (oldIndex < 0) {
+            const { items, addedCount } = mergeOutputLinks(baseItems, [incomingLink]);
+            linkItems.value = items;
+            setLinkStatusText(addedCount > 0 ? `已重拍 JPG 并新增 1 条图床链接，当前共 ${items.length} 条。` : `JPG 图床链接已存在，当前共 ${items.length} 条。`);
+            return;
+        }
+
+        const duplicateIndex = baseItems.findIndex((item, index) => index !== oldIndex && item.url === replacement.url);
+        if (duplicateIndex >= 0) {
+            const nextItems = baseItems.filter((_, index) => index !== oldIndex);
+            linkItems.value = nextItems;
+            setLinkStatusText(`JPG 图床链接已存在，已移除原有损 PNG，当前共 ${nextItems.length} 条。`);
+            return;
+        }
+
+        const nextItems = baseItems.map((item, index) => (index === oldIndex ? replacement : item));
+        linkItems.value = nextItems;
+        setLinkStatusText("已重拍 JPG 并替换原有损 PNG。");
     }
 }
 
@@ -772,6 +856,22 @@ function normalizeDecoratedLinkInput(value) {
         width: normalizePositiveInteger(value.width),
         height: normalizePositiveInteger(value.height),
     };
+}
+
+function normalizeTimestampList(values) {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+    return values.filter((item) => typeof item === "string" && item.trim() !== "").map((item) => item.trim());
+}
+
+function screenshotTimestampFromLinkItem(item) {
+    const filename = typeof item?.filename === "string" && item.filename.trim() !== "" ? item.filename : extractFilenameFromURL(item?.url);
+    const match = /^(\d{2})h(\d{2})m(\d{2})s(?:-\d+)?\.(?:png|jpe?g)$/i.exec(filename.trim());
+    if (!match) {
+        return "";
+    }
+    return `${match[1]}:${match[2]}:${match[3]}`;
 }
 
 function normalizePositiveInteger(value) {
@@ -865,18 +965,41 @@ function buildDownloadProgressMessage(status) {
 }
 
 function buildLinkProgressMessage(action, status) {
+    const label = linkTaskLabel(action);
     switch (status) {
         case "canceled":
-            return action === "append-links" ? "附加图床任务已取消。" : "图床任务已取消。";
+            return `${label}任务已取消。`;
         case "succeeded":
-            return "图床任务已完成。";
+            return `${label}任务已完成。`;
         case "canceling":
-            return action === "append-links" ? "附加图床任务取消中..." : "图床任务取消中...";
+            return `${label}任务取消中...`;
         case "running":
-            return "正在生成截图并上传...";
+            return action === "rerender-jpg" ? "正在重拍 JPG 并上传..." : "正在生成截图并上传...";
         case "pending":
         default:
-            return "截图任务已提交，等待执行...";
+            return action === "rerender-jpg" ? "JPG 重拍任务已提交，等待执行..." : "截图任务已提交，等待执行...";
+    }
+}
+
+function linkTaskLabel(action) {
+    switch (action) {
+        case "append-links":
+            return "附加图床";
+        case "rerender-jpg":
+            return "JPG 重拍";
+        default:
+            return "图床";
+    }
+}
+
+function resolveLinkCanceledNotice(action) {
+    switch (action) {
+        case "append-links":
+            return "附加图床任务已取消。";
+        case "rerender-jpg":
+            return "JPG 重拍任务已取消。";
+        default:
+            return "图床任务已取消。";
     }
 }
 

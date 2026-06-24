@@ -12,6 +12,9 @@ import (
 func (j *screenshotJob) snapshot() transport.ScreenshotJobResponse {
 	j.mu.RLock()
 	count := j.count
+	if len(j.timestamps) > 0 {
+		count = len(j.timestamps)
+	}
 	response := transport.ScreenshotJobResponse{
 		OK:              true,
 		JobID:           j.id,

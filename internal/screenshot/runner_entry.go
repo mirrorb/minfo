@@ -36,6 +36,17 @@ func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir,
 	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, timestamps, onLog)
 }
 
+// runEngineScreenshotsAtTimestampsWithLiveLogs 会解析输入源，并按指定时间点执行截图流程。
+func runEngineScreenshotsAtTimestampsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
+	sources, err := resolveScreenshotSources(ctx, inputPath, onLog)
+	if err != nil {
+		return ScreenshotsResult{}, err
+	}
+	defer sources.cleanup()
+
+	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, timestamps, onLog)
+}
+
 // resolveScreenshotSources 会把外部输入路径解析为截图主媒体源和 DVD 附加探测源。
 func resolveScreenshotSources(ctx context.Context, inputPath string, onLog LogHandler) (resolvedScreenshotSources, error) {
 	screenshotprogress.EmitStepLog(onLog, "启动", 1, 3, "正在解析截图输入源。")
