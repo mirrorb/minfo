@@ -10,6 +10,9 @@ services:
         HTTPS_PROXY: "${HTTPS_PROXY:-}"
         http_proxy: "${http_proxy:-}"
         https_proxy: "${https_proxy:-}"
+        ALPINE_VERSION: "${ALPINE_VERSION:-3.24}"
+        ALPINE_REPO: "${ALPINE_REPO:-https://dl-cdn.alpinelinux.org/alpine/v3.24}"
+        FFMPEG_PKG: "${FFMPEG_PKG:-ffmpeg=8.1.1-r0}"
     privileged: true
     ports:
       - "${HOST_PORT:-38080}:${PORT:-28080}"

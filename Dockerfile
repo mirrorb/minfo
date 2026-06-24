@@ -3,8 +3,8 @@ ARG BDINFO_REF=master
 ARG BDINFO_CSPROJ=BDInfo/BDInfo.csproj
 ARG GO_VERSION=1.26.1
 ARG APP_VERSION=dev
-ARG ALPINE_VERSION=edge
-ARG ALPINE_EDGE_REPO=https://dl-cdn.alpinelinux.org/alpine/edge
+ARG ALPINE_VERSION=3.24
+ARG ALPINE_REPO=https://dl-cdn.alpinelinux.org/alpine/v3.24
 ARG FFMPEG_PKG=ffmpeg=8.1.1-r0
 
 # 构建 WebUI
@@ -86,10 +86,10 @@ RUN mkdir -p /out && \
 
 # 最终运行环境 (Alpine)
 FROM alpine:${ALPINE_VERSION} AS runtime
-ARG ALPINE_EDGE_REPO
+ARG ALPINE_REPO
 ARG FFMPEG_PKG
 RUN set -eux; \
-    printf '%s\n%s\n' "${ALPINE_EDGE_REPO}/main" "${ALPINE_EDGE_REPO}/community" > /etc/apk/repositories; \
+    printf '%s\n%s\n' "${ALPINE_REPO}/main" "${ALPINE_REPO}/community" > /etc/apk/repositories; \
     apk add --no-cache \
         ca-certificates \
         "$FFMPEG_PKG" \
@@ -122,10 +122,10 @@ ENTRYPOINT ["/usr/local/bin/minfo"]
 
 # 本地调试环境 (Go + Delve + 运行依赖)
 FROM golang:${GO_VERSION}-alpine AS debug
-ARG ALPINE_EDGE_REPO
+ARG ALPINE_REPO
 ARG FFMPEG_PKG
 RUN set -eux; \
-    printf '%s\n%s\n' "${ALPINE_EDGE_REPO}/main" "${ALPINE_EDGE_REPO}/community" > /etc/apk/repositories; \
+    printf '%s\n%s\n' "${ALPINE_REPO}/main" "${ALPINE_REPO}/community" > /etc/apk/repositories; \
     apk add --no-cache \
         ca-certificates \
         "$FFMPEG_PKG" \
