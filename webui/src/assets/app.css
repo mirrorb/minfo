@@ -802,16 +802,6 @@ pre {
   aspect-ratio: 16 / 9;
 }
 
-.output-link-badge {
-  background: rgba(182, 91, 11, 0.92);
-  color: #fff8ef;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  box-shadow: 0 6px 16px rgba(106, 55, 11, 0.16);
-  cursor: help;
-}
-
 .output-link-preview-state {
   position: absolute;
   left: 12px;
@@ -903,6 +893,17 @@ pre {
   color: var(--muted);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.output-link-meta-item.output-link-badge {
+  background: #f59e0b;
+  color: #3d2500;
+  border: 1px solid #f97316;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 6px 16px rgba(180, 83, 9, 0.28);
+  cursor: help;
 }
 
 .output-link-meta-item.muted {
