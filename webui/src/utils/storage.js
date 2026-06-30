@@ -10,6 +10,15 @@ const DEFAULT_STATE = {
     uploadProxyURL: "",
     configExpanded: false,
     bdinfoMode: "code",
+    torrentOptions: {
+        format: "v1",
+        pieceLength: 4 << 20,
+        private: true,
+        trackerURL: "",
+        webSeedURL: "",
+        comment: "",
+        source: "",
+    },
 };
 
 export function loadAppState() {
@@ -92,6 +101,7 @@ function normalizeState(value) {
         uploadProxyURL: normalizeUploadProxyURL(source.uploadProxyURL),
         configExpanded: source.configExpanded === true,
         bdinfoMode: normalizeBDInfoMode(source.bdinfoMode),
+        torrentOptions: normalizeTorrentOptions(source.torrentOptions),
     };
 }
 
@@ -125,7 +135,7 @@ function normalizeVariant(value) {
 }
 
 function normalizeTaskJobType(value) {
-    return value === "info" || value === "screenshot" ? value : "";
+    return value === "info" || value === "screenshot" || value === "torrent" ? value : "";
 }
 
 function normalizeTaskAction(value) {
@@ -136,6 +146,7 @@ function normalizeTaskAction(value) {
         case "output-links":
         case "append-links":
         case "rerender-jpg":
+        case "make-torrent":
             return value;
         default:
             return "";
@@ -168,6 +179,40 @@ function normalizeScreenshotCount(value) {
 
 function normalizeUploadProxyURL(value) {
     return typeof value === "string" ? value.trim() : DEFAULT_STATE.uploadProxyURL;
+}
+
+function normalizeTorrentOptions(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const defaults = DEFAULT_STATE.torrentOptions;
+    return {
+        format: source.format === "v1" ? "v1" : defaults.format,
+        pieceLength: normalizeTorrentPieceLength(source.pieceLength),
+        private: source.private !== false,
+        trackerURL: typeof source.trackerURL === "string" ? source.trackerURL : defaults.trackerURL,
+        webSeedURL: typeof source.webSeedURL === "string" ? source.webSeedURL : defaults.webSeedURL,
+        comment: typeof source.comment === "string" ? source.comment : defaults.comment,
+        source: typeof source.source === "string" ? source.source : defaults.source,
+    };
+}
+
+function normalizeTorrentPieceLength(value) {
+    const parsed = Number.parseInt(`${value ?? ""}`.trim(), 10);
+    const allowed = [
+        16 << 10,
+        32 << 10,
+        64 << 10,
+        128 << 10,
+        256 << 10,
+        512 << 10,
+        1 << 20,
+        2 << 20,
+        4 << 20,
+        8 << 20,
+        16 << 20,
+        32 << 20,
+        64 << 20,
+    ];
+    return allowed.includes(parsed) ? parsed : DEFAULT_STATE.torrentOptions.pieceLength;
 }
 
 function isStorageAvailable() {

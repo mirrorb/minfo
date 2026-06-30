@@ -1,7 +1,7 @@
 <template>
     <div class="grain"></div>
     <main class="shell">
-        <NoticeToast :text="noticeText" />
+        <NoticeToast :text="noticeText" :type="noticeType" />
         <AppHeader :version-label="versionLabel" :repo-url="repoUrl" />
 
         <section class="panel">
@@ -114,10 +114,22 @@
                     @bdinfo="runInfo('/api/bdinfo', 'BDInfo', { bdinfo_mode: bdinfoMode }, 'bdinfo')"
                     @download-shots="downloadShots"
                     @output-links="outputShotLinks"
+                    @make-torrent="torrentDialogOpen = true"
                     @stop-active="stopActiveTask"
                 />
             </div>
         </section>
+
+        <TorrentDialog
+            :open="torrentDialogOpen"
+            :busy="busy"
+            :task-progress="taskProgress"
+            :target-path="path"
+            :initial-options="torrentOptions"
+            @close="torrentDialogOpen = false"
+            @stop-active="stopActiveTask"
+            @submit="handleTorrentSubmit"
+        />
 
         <OutputPanel
             v-if="showOutputPanel"
@@ -164,6 +176,7 @@ import PathBrowser from "./components/PathBrowser.vue";
 import ScreenshotHDRProcessorPicker from "./components/ScreenshotHDRProcessorPicker.vue";
 import ScreenshotSubtitleModePicker from "./components/ScreenshotSubtitleModePicker.vue";
 import ScreenshotVariantPicker from "./components/ScreenshotVariantPicker.vue";
+import TorrentDialog from "./components/TorrentDialog.vue";
 import { useMediaActions } from "./composables/useMediaActions";
 import { usePathBrowser } from "./composables/usePathBrowser";
 import { loadAppState, saveAppState } from "./utils/storage";
@@ -180,6 +193,8 @@ const screenshotCount = ref(persistedState.screenshotCount);
 const uploadProxyURL = ref(persistedState.uploadProxyURL);
 const bdinfoMode = ref(persistedState.bdinfoMode);
 const configExpanded = ref(persistedState.configExpanded);
+const torrentDialogOpen = ref(false);
+const torrentOptions = ref(persistedState.torrentOptions);
 const pathBrowser = usePathBrowser({
     initialPath: persistedState.path,
     initialBrowserDir: persistedState.browserDir,
@@ -241,6 +256,7 @@ const {
     stoppingAction,
     taskProgress,
     noticeText,
+    noticeType,
     linkStatusText,
     copyOutputLabel,
     copyLinksLabel,
@@ -251,6 +267,7 @@ const {
     runInfo,
     downloadShots,
     outputShotLinks,
+    makeTorrent,
     appendShotLinks,
     stopActiveTask,
     clearOutputText,
@@ -262,9 +279,17 @@ const {
     rerenderLossyLinkAsJPG,
 } = mediaActions;
 
+const handleTorrentSubmit = async (options) => {
+    torrentOptions.value = options;
+    const ok = await makeTorrent(options);
+    if (ok) {
+        torrentDialogOpen.value = false;
+    }
+};
+
 watch(
-    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, configExpanded, bdinfoMode],
-    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextUploadProxyURL, nextConfigExpanded, nextBDInfoMode]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, uploadProxyURL, configExpanded, bdinfoMode, torrentOptions],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextUploadProxyURL, nextConfigExpanded, nextBDInfoMode, nextTorrentOptions]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
@@ -275,6 +300,7 @@ watch(
             uploadProxyURL: nextUploadProxyURL,
             configExpanded: nextConfigExpanded,
             bdinfoMode: nextBDInfoMode,
+            torrentOptions: nextTorrentOptions,
         });
     },
     { deep: true, immediate: true },

@@ -2,10 +2,13 @@ import { computed, ref, watch } from "vue";
 import {
     cancelInfoJob,
     cancelScreenshotJob,
+    cancelTorrentJob,
     createInfoJob,
     createScreenshotJob,
+    createTorrentJob,
     fetchInfoJob,
     fetchScreenshotJob,
+    fetchTorrentJob,
     startPreparedDownload,
 } from "../api/media";
 import { clearActiveTask, loadActiveTask, saveActiveTask } from "../utils/storage";
@@ -26,6 +29,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
     const copyLinksStatus = ref("");
     const copyBBCodeStatus = ref("");
     const noticeText = ref("");
+    const noticeType = ref("error");
     let noticeTimer = null;
 
     const copyOutputLabel = computed(() => copyOutputStatus.value || "复制输出");
@@ -89,13 +93,15 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     };
 
-    const showNotice = (message) => {
+    const showNotice = (message, type = "error") => {
         noticeText.value = typeof message === "string" ? message : "";
+        noticeType.value = type === "success" ? "success" : "error";
         if (noticeTimer) {
             clearTimeout(noticeTimer);
         }
         noticeTimer = setTimeout(() => {
             noticeText.value = "";
+            noticeType.value = "error";
             noticeTimer = null;
         }, 2400);
     };
@@ -234,6 +240,16 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         setTaskProgress(resolveTaskProgress(progress, buildLinkFallbackProgress(status)));
     };
 
+    const applyTorrentProgress = (status, progress = null) => {
+        const message = buildTorrentProgressMessage(status, progress);
+        setBusy(true, message, "make-torrent");
+        if (isTerminalTaskStatus(status)) {
+            clearTaskProgress();
+            return;
+        }
+        setTaskProgress(resolveTaskProgress(progress, buildTorrentFallbackProgress(status)));
+    };
+
     const stopActiveTask = async () => {
         const task = activeTask.value || loadActiveTask();
         if (!task || busy.value !== true) {
@@ -245,7 +261,11 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
         stoppingAction.value = task.action;
         try {
-            const job = task.jobType === "info" ? await cancelInfoJob(task.jobId) : await cancelScreenshotJob(task.jobId);
+            const job = task.jobType === "info"
+                ? await cancelInfoJob(task.jobId)
+                : task.jobType === "torrent"
+                    ? await cancelTorrentJob(task.jobId)
+                    : await cancelScreenshotJob(task.jobId);
             applyPersistedTaskProgress(task, job.status, job.progress);
         } catch (err) {
             stoppingAction.value = "";
@@ -434,6 +454,68 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     };
 
+    const runTorrentTask = async ({ options = {}, jobId = "" } = {}) => {
+        const baseTask = {
+            jobType: "torrent",
+            action: "make-torrent",
+            panel: "output",
+            jobId,
+            logLabel: "torrent create",
+        };
+
+        try {
+            activateOutputPanel();
+            applyTorrentProgress("pending");
+
+            let trackedTask = baseTask;
+            if (jobId === "") {
+                const job = await createTorrentJob(path.value.trim(), options);
+                applyTorrentProgress(job.status, job.progress);
+                trackedTask = {
+                    ...baseTask,
+                    jobId: job.jobId,
+                };
+            }
+
+            persistActiveTask(trackedTask);
+            const result = await waitForAsyncJob(fetchTorrentJob, trackedTask.jobId, trackedTask.logLabel, (job) => {
+                applyTorrentProgress(job.status, job.progress);
+            });
+
+            if (typeof result.downloadURL !== "string" || result.downloadURL.trim() === "") {
+                throw buildAsyncJobError({
+                    error: "制种任务已完成，但未返回下载地址。",
+                    logs: result.logs,
+                    logEntries: result.logEntries,
+                });
+            }
+
+            clearPersistedActiveTask();
+            startPreparedDownload(new URL(result.downloadURL, window.location.origin).toString());
+            setOutputText(jobId === "" ? "种子已生成。" : "种子已生成，正在恢复下载。");
+            showNotice("种子已开始下载。", "success");
+            return true;
+        } catch (err) {
+            clearPersistedActiveTask();
+            logTaskError(baseTask.logLabel, err);
+
+            if (err?.canceled) {
+                activateOutputPanel();
+                setOutputText("制种任务已取消。");
+                showNotice("制种任务已取消。");
+                return false;
+            }
+
+            clearOutputState();
+            hidePanels();
+            showNotice(resolveTaskErrorMessage(err, "制种任务已失效，请重新发起。"));
+            return false;
+        } finally {
+            clearTaskProgress();
+            setBusy(false);
+        }
+    };
+
     const runInfo = async (url, label, fields = {}, action = "") => {
         if (!hasInput.value) {
             showNotice("请先选择媒体路径。");
@@ -457,6 +539,14 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             return;
         }
         await runLinkTask({ action: "output-links" });
+    };
+
+    const makeTorrent = async (options = {}) => {
+        if (!hasInput.value) {
+            showNotice("请先选择媒体路径。");
+            return false;
+        }
+        return runTorrentTask({ options });
     };
 
     const appendShotLinks = async () => {
@@ -518,6 +608,9 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                 return;
             case "rerender-jpg":
                 await runLinkTask({ action: "rerender-jpg", jobId: persistedTask.jobId });
+                return;
+            case "make-torrent":
+                await runTorrentTask({ jobId: persistedTask.jobId });
                 return;
             default:
                 clearPersistedActiveTask();
@@ -629,6 +722,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         stoppingAction,
         taskProgress,
         noticeText,
+        noticeType,
         linkStatusText,
         copyOutputLabel,
         copyLinksLabel,
@@ -639,6 +733,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         runInfo,
         downloadShots,
         outputShotLinks,
+        makeTorrent,
         appendShotLinks,
         rerenderLossyLinkAsJPG,
         stopActiveTask,
@@ -665,6 +760,9 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
             case "append-links":
             case "rerender-jpg":
                 applyLinkProgress(task.action, status, progress);
+                return;
+            case "make-torrent":
+                applyTorrentProgress(status, progress);
                 return;
             default:
         }
@@ -981,6 +1079,23 @@ function buildLinkProgressMessage(action, status) {
     }
 }
 
+function buildTorrentProgressMessage(status, progress = null) {
+    const normalizedProgress = normalizeTaskProgressPayload(progress);
+    switch (status) {
+        case "canceled":
+            return "制种任务已取消。";
+        case "succeeded":
+            return "种子已生成。";
+        case "canceling":
+            return "制种任务取消中...";
+        case "running":
+            return normalizedProgress?.detail || "正在制作种子...";
+        case "pending":
+        default:
+            return "制种任务已提交，等待执行...";
+    }
+}
+
 function linkTaskLabel(action) {
     switch (action) {
         case "append-links":
@@ -1020,6 +1135,10 @@ function buildDownloadFallbackProgress(status) {
 
 function buildLinkFallbackProgress(status) {
     return buildScreenshotFallbackTaskProgress(status, "上传图床", "正在生成截图并上传图床。");
+}
+
+function buildTorrentFallbackProgress(status) {
+    return buildFallbackTaskProgress(status, "制作种子", "正在制作种子。");
 }
 
 function buildFallbackTaskProgress(status, runningStage, runningDetail) {

@@ -57,6 +57,19 @@ type ScreenshotJobResponse struct {
 	PNGLossyIndexes []int           `json:"png_lossy_indexes,omitempty"`
 }
 
+// TorrentJobResponse 表示制种后台任务的创建结果、状态查询结果和最终下载地址。
+type TorrentJobResponse struct {
+	OK          bool          `json:"ok"`
+	JobID       string        `json:"job_id,omitempty"`
+	Status      string        `json:"status,omitempty"`
+	Output      string        `json:"output,omitempty"`
+	DownloadURL string        `json:"download_url,omitempty"`
+	Error       string        `json:"error,omitempty"`
+	Logs        string        `json:"logs,omitempty"`
+	LogEntries  []LogEntry    `json:"log_entries,omitempty"`
+	Progress    *TaskProgress `json:"progress,omitempty"`
+}
+
 // InfoJobResponse 表示信息类后台任务的创建结果、状态查询结果和最终输出。
 type InfoJobResponse struct {
 	OK         bool          `json:"ok"`

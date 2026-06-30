@@ -16,6 +16,34 @@
   box-sizing: border-box;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(47, 111, 109, 0.46) rgba(47, 111, 109, 0.08);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(47, 111, 109, 0.07);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(47, 111, 109, 0.58), rgba(195, 101, 47, 0.48)) border-box;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(47, 111, 109, 0.74), rgba(195, 101, 47, 0.62)) border-box;
+  background-clip: padding-box;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -56,6 +84,11 @@ body {
   box-shadow: var(--shadow);
   border: 1px solid rgba(255, 255, 255, 0.12);
   pointer-events: none;
+}
+
+.notice-toast-success {
+  background: rgba(47, 121, 88, 0.95);
+  color: #f4fff8;
 }
 
 .notice-fade-enter-active,
@@ -368,12 +401,30 @@ label {
 
 input[type="file"],
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+textarea,
+select {
   border-radius: 12px;
   border: 1px solid rgba(33, 50, 60, 0.2);
   padding: 12px 14px;
   font-size: 0.95rem;
   background: rgba(255, 255, 255, 0.9);
+}
+
+textarea,
+select {
+  font-family: var(--font-body);
+}
+
+textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+select {
+  min-height: 42px;
 }
 
 .config-number-input {
@@ -638,6 +689,183 @@ button.ghost {
   color: var(--accent);
   box-shadow: none;
   border: 1px solid rgba(47, 111, 109, 0.4);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(14, 22, 30, 0.38);
+  backdrop-filter: blur(8px);
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.16s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.torrent-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(88vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(247, 245, 239, 0.98);
+  border: 1px solid rgba(33, 50, 60, 0.16);
+  box-shadow: 0 24px 64px rgba(14, 22, 30, 0.26);
+}
+
+.torrent-dialog-header {
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(247, 245, 239, 0.96);
+  border-bottom: 1px solid rgba(33, 50, 60, 0.12);
+}
+
+.torrent-dialog-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.torrent-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  flex: 1 1 auto;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  scrollbar-gutter: stable;
+}
+
+.torrent-dialog-progress {
+  flex: 0 0 auto;
+  height: 4px;
+  overflow: hidden;
+  background: rgba(47, 111, 109, 0.12);
+}
+
+.torrent-dialog-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(47, 111, 109, 0.2), var(--accent), var(--accent-2));
+  transition: width 0.18s ease;
+}
+
+.torrent-dialog-progress-bar.indeterminate {
+  width: 42%;
+  animation: torrent-progress-slide 1.05s ease-in-out infinite;
+}
+
+.torrent-dialog-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(47, 111, 109, 0.14);
+  background: rgba(47, 111, 109, 0.08);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.torrent-dialog-status strong {
+  color: var(--ink);
+}
+
+.torrent-dialog-status span:not(.torrent-dialog-status-percent) {
+  grid-column: 1 / -1;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.torrent-dialog-status-percent {
+  grid-row: 1;
+  grid-column: 2;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.torrent-fieldset {
+  margin: 0;
+  padding: 14px 12px 12px;
+  border: 1px solid rgba(33, 50, 60, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.torrent-fieldset legend {
+  padding: 0 6px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.torrent-settings,
+.torrent-fields {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.torrent-settings select {
+  width: 118px;
+}
+
+.torrent-settings-wide {
+  grid-column: 1 / -1;
+}
+
+.torrent-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-weight: 500;
+}
+
+.torrent-check-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.torrent-fields label {
+  font-weight: 600;
+}
+
+.torrent-fields textarea,
+.torrent-fields input[type="text"] {
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.torrent-fields textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.torrent-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .output-header {
@@ -968,6 +1196,16 @@ pre {
   }
 }
 
+@keyframes torrent-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(245%);
+  }
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -1022,5 +1260,32 @@ pre {
 
   .output-link-preview {
     width: 100%;
+  }
+
+  .modal-backdrop {
+    align-items: start;
+    padding: 14px;
+  }
+
+  .torrent-dialog {
+    width: 100%;
+    max-height: calc(100vh - 28px);
+  }
+
+  .torrent-settings,
+  .torrent-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .torrent-settings select {
+    width: 100%;
+  }
+
+  .torrent-dialog-actions {
+    justify-content: stretch;
+  }
+
+  .torrent-dialog-actions button {
+    flex: 1;
   }
 }

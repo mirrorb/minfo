@@ -12,7 +12,10 @@ services:
         https_proxy: "${https_proxy:-}"
         ALPINE_VERSION: "${ALPINE_VERSION:-3.24}"
         ALPINE_REPO: "${ALPINE_REPO:-https://dl-cdn.alpinelinux.org/alpine/v3.24}"
-        FFMPEG_PKG: "${FFMPEG_PKG:-ffmpeg=8.1.1-r0}"
+        FFMPEG_PKG: "${FFMPEG_PKG:-ffmpeg=8.1.2-r0}"
+        GOPROXY: "${GOPROXY:-https://goproxy.cn,direct}"
+        MKBRR_REPO: "${MKBRR_REPO:-https://github.com/mirrorb/mkbrr.git}"
+        MKBRR_REF: "${MKBRR_REF:-main}"
     privileged: true
     ports:
       - "${HOST_PORT:-38080}:${PORT:-28080}"

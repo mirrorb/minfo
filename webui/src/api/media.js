@@ -97,9 +97,59 @@ export async function cancelScreenshotJob(jobId) {
     return data;
 }
 
-export function startPreparedDownload(url) {
+export async function createTorrentJob(path, options = {}) {
+    const response = await postForm("/api/torrent-jobs", {
+        path,
+        format: options.format,
+        piece_length: options.pieceLength,
+        private: options.private ? "1" : "0",
+        tracker_url: options.trackerURL,
+        web_seed_url: options.webSeedURL,
+        comment: options.comment,
+        source: options.source,
+    });
+    const data = normalizeTorrentJobPayload(await safeReadJSON(response));
+    if (!response.ok || !data.ok || typeof data.jobId !== "string" || data.jobId.trim() === "") {
+        throw buildResponseError(data.error || "制种任务创建失败。", data);
+    }
+    return data;
+}
+
+export async function fetchTorrentJob(jobId) {
+    const response = await fetch(`/api/torrent-jobs/${encodeURIComponent(jobId)}`, {
+        cache: "no-store",
+        headers: {
+            "Cache-Control": "no-store",
+        },
+    });
+    const data = normalizeTorrentJobPayload(await safeReadJSON(response));
+    if (!response.ok || !data.ok) {
+        throw buildResponseError(data.error || "制种任务状态读取失败。", data);
+    }
+    return data;
+}
+
+export async function cancelTorrentJob(jobId) {
+    const response = await fetch(`/api/torrent-jobs/${encodeURIComponent(jobId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: {
+            "Cache-Control": "no-store",
+        },
+    });
+    const data = normalizeTorrentJobPayload(await safeReadJSON(response));
+    if (!response.ok || !data.ok) {
+        throw buildResponseError(data.error || "制种任务取消失败。", data);
+    }
+    return data;
+}
+
+export function startPreparedDownload(url, filename = "") {
     const anchor = document.createElement("a");
     anchor.href = url;
+    if (typeof filename === "string" && filename.trim() !== "") {
+        anchor.download = filename.trim();
+    }
     anchor.style.display = "none";
     document.body.appendChild(anchor);
     anchor.click();
@@ -141,6 +191,40 @@ function buildResponseError(message, data = {}) {
         error.logEntries = data.logEntries;
     }
     return error;
+}
+
+function parseDownloadFilename(header, fallback) {
+    if (typeof header !== "string" || header.trim() === "") {
+        return fallback;
+    }
+
+    const encodedMatch = header.match(/filename\*\s*=\s*(?:UTF-8''|utf-8'')?([^;]+)/);
+    if (encodedMatch) {
+        const encoded = trimHeaderValue(encodedMatch[1]);
+        try {
+            const decoded = decodeURIComponent(encoded);
+            if (decoded.trim() !== "") {
+                return decoded.trim();
+            }
+        } catch {}
+    }
+
+    const plainMatch = header.match(/filename\s*=\s*([^;]+)/);
+    if (plainMatch) {
+        const plain = trimHeaderValue(plainMatch[1]);
+        if (plain !== "") {
+            return plain;
+        }
+    }
+    return fallback;
+}
+
+function trimHeaderValue(value) {
+    let result = `${value ?? ""}`.trim();
+    if (result.startsWith("\"") && result.endsWith("\"") && result.length >= 2) {
+        result = result.slice(1, -1);
+    }
+    return result.trim();
 }
 
 function normalizeLogEntries(entries) {
@@ -191,6 +275,21 @@ function normalizeScreenshotJobPayload(data = {}) {
                 .map((item) => Number.parseInt(`${item}`, 10))
                 .filter((item) => Number.isFinite(item) && item >= 0)
             : [],
+    };
+}
+
+function normalizeTorrentJobPayload(data = {}) {
+    return {
+        ...data,
+        ok: data.ok === true,
+        jobId: typeof data.job_id === "string" ? data.job_id : "",
+        status: typeof data.status === "string" ? data.status : "",
+        output: typeof data.output === "string" ? data.output : "",
+        downloadURL: typeof data.download_url === "string" ? data.download_url : "",
+        error: typeof data.error === "string" ? data.error : "",
+        logs: typeof data.logs === "string" ? data.logs : "",
+        logEntries: normalizeLogEntries(data.log_entries),
+        progress: normalizeTaskProgress(data.progress),
     };
 }
 

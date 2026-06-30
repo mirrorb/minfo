@@ -17,6 +17,7 @@ const (
 	MediaInfoBinaryPath = "/usr/bin/mediainfo"
 	OxiPNGBinaryPath    = "/usr/bin/oxipng"
 	PNGQuantBinaryPath  = "/usr/bin/pngquant"
+	MkbrrBinaryPath     = "/usr/local/bin/mkbrr"
 	BDInfoBinaryPath    = "/usr/local/bin/bdinfo"
 	BDSubBinaryPath     = "/usr/local/bin/bdsub"
 	MountBinaryPath     = "/bin/mount"

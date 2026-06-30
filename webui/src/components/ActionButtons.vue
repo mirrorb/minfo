@@ -1,5 +1,8 @@
 <template>
     <div class="actions">
+        <button class="action-btn" :disabled="props.busy || !props.hasInput" @click="$emit('make-torrent')">
+            <span>制作种子</span>
+        </button>
         <button class="action-btn" :class="{ stoppable: isActive('mediainfo') }" :disabled="isDisabled('mediainfo')" @click="handleClick('mediainfo', 'mediainfo')">
             <span>{{ buildLabel("mediainfo", "生成 MediaInfo") }}</span>
         </button>
@@ -23,7 +26,7 @@ const props = defineProps({
     hasInput: { type: Boolean, required: true },
 });
 
-const emit = defineEmits(["mediainfo", "bdinfo", "download-shots", "output-links", "stop-active"]);
+const emit = defineEmits(["mediainfo", "bdinfo", "download-shots", "output-links", "make-torrent", "stop-active"]);
 
 const isActive = (action) => props.busy && props.activeAction === action;
 

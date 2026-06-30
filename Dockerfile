@@ -5,7 +5,10 @@ ARG GO_VERSION=1.26.1
 ARG APP_VERSION=dev
 ARG ALPINE_VERSION=3.24
 ARG ALPINE_REPO=https://dl-cdn.alpinelinux.org/alpine/v3.24
-ARG FFMPEG_PKG=ffmpeg=8.1.1-r0
+ARG FFMPEG_PKG=ffmpeg=8.1.2-r0
+ARG GOPROXY=https://goproxy.cn,direct
+ARG MKBRR_REPO=https://github.com/mirrorb/mkbrr.git
+ARG MKBRR_REF=main
 
 # 构建 WebUI
 FROM --platform=$BUILDPLATFORM node:20-alpine AS webui
@@ -20,6 +23,7 @@ RUN npm run build
 # 构建 Go 后端
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 ARG APP_VERSION=dev
+ARG GOPROXY
 WORKDIR /src
 COPY go.mod ./
 COPY *.go ./
@@ -29,6 +33,7 @@ COPY --from=webui /app/dist ./webui/dist
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0
+ENV GOPROXY=$GOPROXY
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w -X minfo/internal/version.Version=${APP_VERSION}" -o /out/minfo ./cmd/minfo
 
 # 构建 BDInfo (.NET)
@@ -84,6 +89,20 @@ COPY tools/bdsub_probe.c ./tools/bdsub_probe.c
 RUN mkdir -p /out && \
     cc -O2 -Wall -Wextra -std=c11 ./tools/bdsub_probe.c -o /out/bdsub
 
+# 从源码构建 mkbrr
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS mkbrr
+ARG MKBRR_REPO
+ARG MKBRR_REF
+ARG GOPROXY
+ARG TARGETOS
+ARG TARGETARCH
+RUN apk add --no-cache git ca-certificates
+RUN git clone --depth 1 --branch "$MKBRR_REF" "$MKBRR_REPO" /src/mkbrr
+WORKDIR /src/mkbrr
+ENV CGO_ENABLED=0
+ENV GOPROXY=$GOPROXY
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/mkbrr .
+
 # 最终运行环境 (Alpine)
 FROM alpine:${ALPINE_VERSION} AS runtime
 ARG ALPINE_REPO
@@ -109,8 +128,9 @@ RUN set -eux; \
 COPY --from=build /out/minfo /usr/local/bin/minfo
 COPY --from=bdinfo-build /out/bdinfo/BDInfo /usr/local/bin/bdinfo
 COPY --from=media-helper-build /out/bdsub /usr/local/bin/bdsub
+COPY --from=mkbrr /out/mkbrr /usr/local/bin/mkbrr
 
-RUN chmod +x /usr/local/bin/minfo /usr/local/bin/bdinfo /usr/local/bin/bdsub
+RUN chmod +x /usr/local/bin/minfo /usr/local/bin/bdinfo /usr/local/bin/bdsub /usr/local/bin/mkbrr
 
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
@@ -145,8 +165,9 @@ RUN GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest
 
 COPY --from=runtime /usr/local/bin/bdinfo /usr/local/bin/bdinfo
 COPY --from=runtime /usr/local/bin/bdsub /usr/local/bin/bdsub
+COPY --from=runtime /usr/local/bin/mkbrr /usr/local/bin/mkbrr
 
-RUN chmod +x /usr/local/bin/dlv /usr/local/bin/bdinfo /usr/local/bin/bdsub
+RUN chmod +x /usr/local/bin/dlv /usr/local/bin/bdinfo /usr/local/bin/bdsub /usr/local/bin/mkbrr
 
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8

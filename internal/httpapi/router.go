@@ -21,6 +21,8 @@ func NewHandler(assets fs.FS) http.Handler {
 	mux.HandleFunc("/api/screenshot-jobs", handlers.ScreenshotJobsHandler)
 	mux.HandleFunc("/api/screenshot-jobs/", handlers.ScreenshotJobHandler)
 	mux.HandleFunc("/api/screenshots", handlers.ScreenshotsHandler)
+	mux.HandleFunc("/api/torrent-jobs", handlers.TorrentJobsHandler)
+	mux.HandleFunc("/api/torrent-jobs/", handlers.TorrentJobHandler)
 	mux.HandleFunc("/api/path", handlers.PathSuggestHandler)
 	return middleware.Logging(middleware.Authenticate(mux))
 }
