@@ -6,6 +6,7 @@
 
 ## 支持功能
 
+- 制作种子
 - 输出 `MediaInfo` 信息
 - 输出 `BDInfo` 信息，支持精简报告和完整报告，底层使用 [tetrahydroc/BDInfoCLI](https://github.com/tetrahydroc/BDInfoCLI)
 - 生成截图并打包为 ZIP 下载
