@@ -4,7 +4,7 @@
         <NoticeToast :text="noticeText" :type="noticeType" />
         <AppHeader :version-label="versionLabel" :repo-url="repoUrl" />
 
-        <section class="panel">
+        <section class="main-panel">
             <PathBrowser
                 v-model:path="path"
                 v-model:search-keyword="searchKeyword"
@@ -15,23 +15,26 @@
                 :can-navigate-up="canNavigateUp"
                 :entries="filteredEntries"
                 @navigate-up="navigateUp"
+                @navigate-path="navigateToDirectory"
                 @refresh="refreshBrowser"
                 @enter-entry="handleEntryEnter"
                 @open-entry="handleEntryDoubleClick"
             />
 
             <div class="panel-section">
-                <div class="panel-section-header config-section-header">
-                    <label>配置</label>
+                <div class="panel-section-header">
                     <button
-                        class="config-toggle icon-btn ghost"
+                        class="config-section-header"
                         type="button"
                         :aria-expanded="configExpanded"
                         aria-controls="config-panel"
                         :aria-label="configExpanded ? '收起配置' : '展开配置'"
                         @click="configExpanded = !configExpanded"
                     >
-                        <span aria-hidden="true">{{ configExpanded ? "⌃" : "⌄" }}</span>
+                        <span class="config-section-title">配置</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" :class="{ expanded: configExpanded }">
+                            <path d="M7.4 9.4 12 14l4.6-4.6L18 10.8l-6 6-6-6 1.4-1.4Z" />
+                        </svg>
                     </button>
                 </div>
                 <Transition name="config-collapse">
@@ -156,6 +159,7 @@
             @stop-active="stopActiveTask"
             @copy-links="copyLinks"
             @copy-bbcode="copyBBCode"
+            @copy-link="copyLinkItem"
             @clear="clearLinkItems"
             @remove-link="removeLink"
             @rerender-jpg="rerenderLossyLinkAsJPG"
@@ -243,6 +247,7 @@ const {
     filteredEntries,
     hasInput,
     navigateUp,
+    navigateToDirectory,
     refreshBrowser,
     handleEntryEnter,
     handleEntryDoubleClick,
@@ -275,6 +280,7 @@ const {
     copyOutputText,
     copyLinks,
     copyBBCode,
+    copyLinkItem,
     removeLink,
     rerenderLossyLinkAsJPG,
 } = mediaActions;
@@ -306,3 +312,264 @@ watch(
     { deep: true, immediate: true },
 );
 </script>
+
+<style scoped>
+.grain {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.08'/></svg>");
+}
+
+.shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 14px 32px 56px;
+    display: grid;
+    gap: 20px;
+}
+
+.main-panel {
+    position: relative;
+    z-index: 1;
+    padding: 24px;
+    border: 1px solid rgba(33, 50, 60, 0.07);
+    border-radius: 20px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    animation: main-panel-rise 0.6s ease both;
+}
+
+.panel-section {
+    display: grid;
+    gap: 16px;
+}
+
+.panel-section + .panel-section {
+    margin-top: 28px;
+    padding-top: 8px;
+}
+
+.panel-section-header {
+    display: grid;
+    gap: 0;
+}
+
+.config-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 10px;
+    margin: -8px -10px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        color 0.16s ease;
+}
+
+.config-section-header:hover {
+    background: rgba(47, 111, 109, 0.06);
+    transform: none;
+}
+
+.config-section-header:focus-visible {
+    outline: 2px solid rgba(47, 111, 109, 0.26);
+    outline-offset: 2px;
+}
+
+.config-section-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    text-align: left;
+}
+
+.config-section-header svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+    transition: transform 0.16s ease;
+}
+
+.config-section-header svg.expanded {
+    transform: rotate(180deg);
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 20px;
+    padding: 18px;
+    border-radius: 16px;
+    background: #f9fafb;
+    border: 1px solid rgba(33, 50, 60, 0.08);
+}
+
+.config-grid .field {
+    margin-bottom: 0;
+}
+
+.config-collapse-enter-active,
+.config-collapse-leave-active {
+    max-height: 760px;
+    overflow: hidden;
+    transform-origin: top;
+    transition:
+        max-height 0.22s ease,
+        opacity 0.18s ease,
+        transform 0.22s ease,
+        padding-top 0.22s ease,
+        padding-bottom 0.22s ease,
+        border-top-width 0.22s ease,
+        border-bottom-width 0.22s ease;
+}
+
+.config-collapse-enter-from,
+.config-collapse-leave-to {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+}
+
+.config-field-wide {
+    grid-column: 1 / -1;
+}
+
+.config-text-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 9px 12px;
+    font-family: var(--font-mono);
+}
+
+.config-number-input {
+    width: 96px;
+}
+
+.panel-section-actions :deep(.actions) {
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: rgba(47, 111, 109, 0.04);
+    border: 1px solid rgba(47, 111, 109, 0.12);
+}
+
+.field-label-muted {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.field-label-with-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-help {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+}
+
+.field-help-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(47, 111, 109, 0.35);
+    background: rgba(47, 111, 109, 0.08);
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.field-help:hover .field-help-trigger,
+.field-help:focus .field-help-trigger,
+.field-help:focus-within .field-help-trigger {
+    background: rgba(47, 111, 109, 0.16);
+    transform: translateY(-1px);
+}
+
+.field-help-bubble {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 20;
+    width: min(320px, calc(100vw - 88px));
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(27, 31, 34, 0.96);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.55;
+    box-shadow: 0 12px 28px rgba(14, 22, 30, 0.24);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.field-help-bubble::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 10px;
+    width: 12px;
+    height: 12px;
+    background: rgba(27, 31, 34, 0.96);
+    transform: rotate(45deg);
+}
+
+.field-help:hover .field-help-bubble,
+.field-help:focus .field-help-bubble,
+.field-help:focus-within .field-help-bubble {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.field-help-bubble strong {
+    color: #ffffff;
+}
+
+@keyframes main-panel-rise {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 900px) {
+    .shell {
+        padding: 12px 20px 44px;
+    }
+
+    .config-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>

@@ -266,6 +266,10 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                 : task.jobType === "torrent"
                     ? await cancelTorrentJob(task.jobId)
                     : await cancelScreenshotJob(task.jobId);
+            if (isTerminalTaskStatus(job.status)) {
+                handleTerminalStopResponse(task, job);
+                return;
+            }
             applyPersistedTaskProgress(task, job.status, job.progress);
         } catch (err) {
             stoppingAction.value = "";
@@ -691,6 +695,21 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         }
     };
 
+    const copyLinkItem = async (url) => {
+        const text = typeof url === "string" ? url.trim() : "";
+        if (text === "") {
+            showNotice("没有可复制的链接。");
+            return;
+        }
+
+        try {
+            await copyText(text);
+            showNotice("已复制。", "success");
+        } catch (err) {
+            showNotice(err?.message || "复制链接失败。");
+        }
+    };
+
     const removeLink = (id) => {
         if (busy.value) {
             return;
@@ -742,6 +761,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         copyOutputText,
         copyLinks,
         copyBBCode,
+        copyLinkItem,
         removeLink,
     };
 
@@ -766,6 +786,23 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                 return;
             default:
         }
+    }
+
+    function handleTerminalStopResponse(task, job) {
+        clearPersistedActiveTask();
+        clearTaskProgress();
+        stoppingAction.value = "";
+
+        if (task.jobType === "info" && job.status === "succeeded") {
+            activateOutputPanel();
+            setOutputText(job.output || "没有输出。");
+        } else if (job.status === "canceled") {
+            showNotice("任务已取消。");
+        } else if (job.status === "failed") {
+            showNotice(resolveTaskErrorMessage(buildAsyncJobError(job), "任务已失效，请重新发起。"));
+        }
+
+        setBusy(false);
     }
 
     function applyRunningLinkItems(action, baseItems, result = {}) {

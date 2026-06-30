@@ -42,3 +42,95 @@ defineProps({
     },
 });
 </script>
+
+<style scoped>
+.hero {
+    position: relative;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+    padding-top: 2px;
+}
+
+.hero-meta {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.hero-version {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+}
+
+.hero-repo-link {
+    position: relative;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink);
+    text-decoration: none;
+    cursor: pointer;
+    pointer-events: auto;
+    transition:
+        transform 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.hero-repo-link:hover {
+    opacity: 0.72;
+    transform: translateY(-1px);
+}
+
+.hero-repo-link svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+}
+
+.hero-copy {
+    max-width: 760px;
+    padding-right: 120px;
+}
+
+h1 {
+    margin: 0 0 4px;
+    font-family: var(--font-body);
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
+    font-weight: 800;
+    color: #202829;
+    letter-spacing: 0;
+}
+
+.lead {
+    margin: 0;
+    font-size: 0.96rem;
+    color: rgba(74, 90, 99, 0.82);
+}
+
+@media (max-width: 900px) {
+    .hero-meta {
+        position: static;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .hero-copy {
+        padding-right: 0;
+    }
+}
+</style>

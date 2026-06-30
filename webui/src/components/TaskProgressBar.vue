@@ -47,3 +47,73 @@ const detailText = computed(() => {
     return "";
 });
 </script>
+
+<style scoped>
+.task-progress {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(245, 248, 248, 0.96), rgba(238, 242, 242, 0.92));
+    border: 1px solid rgba(47, 111, 109, 0.12);
+}
+
+.task-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.task-progress-header strong {
+    font-size: 0.95rem;
+}
+
+.task-progress-header span {
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    color: var(--muted);
+}
+
+.task-progress-track {
+    height: 12px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(47, 111, 109, 0.12);
+}
+
+.task-progress-fill {
+    position: relative;
+    height: 100%;
+    min-width: 14px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2f6f6d, #3a8885);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    transition: width 0.35s ease;
+}
+
+.task-progress.indeterminate .task-progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.42) 50%, transparent 100%);
+    transform: translateX(-100%);
+    animation: task-progress-shimmer 1.15s linear infinite;
+}
+
+.task-progress-detail {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+@keyframes task-progress-shimmer {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+</style>

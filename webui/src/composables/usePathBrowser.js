@@ -83,6 +83,13 @@ export function usePathBrowser(options = {}) {
         await loadDirectory(browserDir.value || "");
     };
 
+    const navigateToDirectory = async (dir) => {
+        if (browserLoading.value) {
+            return;
+        }
+        await loadDirectory(typeof dir === "string" ? dir : "");
+    };
+
     const handleEntryEnter = async (entry) => {
         if (browserLoading.value) {
             return;
@@ -131,6 +138,7 @@ export function usePathBrowser(options = {}) {
         filteredEntries,
         hasInput,
         navigateUp,
+        navigateToDirectory,
         refreshBrowser,
         handleEntryEnter,
         handleEntryDoubleClick,
