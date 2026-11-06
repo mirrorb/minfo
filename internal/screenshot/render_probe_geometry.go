@@ -12,7 +12,7 @@ import (
 	"minfo/internal/system"
 )
 
-// 智能校正允许 0.5% 的像素宽高比偏差，比较时不受输出尺寸取偶数影响。
+// 智能模式允许 0.5% 的像素宽高比偏差，比较时不受输出尺寸取偶数影响。
 const autoSARTolerance = 0.005
 
 // buildDisplayAspectFilter 会构建显示参数显示比例过滤器，为后续流程准备好可直接使用的结果。
@@ -87,7 +87,7 @@ func (r *screenshotRunner) detectDisplayGeometry() (string, int, int) {
 func (r *screenshotRunner) resolveDisplayGeometry(width, height int, sar, dar string) (string, int, int) {
 	mode := NormalizeSizeMode(r.sizeMode)
 	filter, outputWidth, outputHeight := screenshotGeometryForMetadata(width, height, sar, dar, mode)
-	modeLabel := "智能校正"
+	modeLabel := "智能"
 	if mode == SizeModeOriginal {
 		modeLabel = "原始像素"
 	}

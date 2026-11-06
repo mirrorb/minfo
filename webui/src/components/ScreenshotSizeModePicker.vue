@@ -28,7 +28,7 @@ const props = defineProps({
 defineEmits(["update:modelValue"]);
 
 const options = [
-    { value: "auto", label: "智能校正", description: "自动按正确的播放比例拉正 DVD、老电视录像等变形片源" },
+    { value: "auto", label: "智能", description: "一般视频不作调整；DVD、老电视录像等变形片源会自动按正确的播放比例拉正。" },
     { value: "original", label: "原始像素", description: "保留视频原始像素尺寸，不进行宽高比缩放。" },
 ];
 const selectedDescription = computed(() => options.find((option) => option.value === props.modelValue)?.description || options[0].description);
