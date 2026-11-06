@@ -5,7 +5,7 @@ ARG GO_VERSION=1.26.1
 ARG APP_VERSION=dev
 ARG ALPINE_VERSION=3.24
 ARG ALPINE_REPO=https://dl-cdn.alpinelinux.org/alpine/v3.24
-ARG FFMPEG_PKG=ffmpeg=8.1.2-r0
+ARG FFMPEG_PKG=ffmpeg~8.1
 ARG GOPROXY=https://goproxy.cn,direct
 ARG MKBRR_REPO=https://github.com/mirrorb/mkbrr.git
 ARG MKBRR_REF=main
