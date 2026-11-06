@@ -7,7 +7,7 @@ export function normalizeComparePath(value) {
     if (value === "/" || value === "\\") {
         return "/";
     }
-    return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    return value.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 export function withTrailingSeparator(value) {

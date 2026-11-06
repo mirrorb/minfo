@@ -120,7 +120,7 @@
 
 <script setup>
 import { computed } from "vue";
-import { buildBreadcrumbItems, formatFileSize } from "../utils/path-browser";
+import { buildBreadcrumbItems, formatFileSize, normalizeComparePath } from "../utils/path-browser";
 
 const props = defineProps({
     path: { type: String, required: true },
@@ -136,16 +136,6 @@ const props = defineProps({
 defineEmits(["update:path", "update:searchKeyword", "navigate-up", "navigate-path", "refresh", "open-entry", "enter-entry"]);
 
 const breadcrumbItems = computed(() => buildBreadcrumbItems(props.browserDir));
-
-const normalizeComparePath = (value) => {
-    if (!value) {
-        return "";
-    }
-    if (value === "/" || value === "\\") {
-        return "/";
-    }
-    return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-};
 
 const entryIconType = (entry) => {
     if (entry?.isDir) {
