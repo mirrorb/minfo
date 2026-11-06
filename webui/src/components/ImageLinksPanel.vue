@@ -89,7 +89,7 @@
                                 class="ghost output-link-original"
                                 type="button"
                                 :disabled="busy || !item.originalDownloadURL || downloadingOriginalIds.includes(item.id)"
-                                :title="item.originalDownloadURL ? '下载有损压缩前的 PNG 原图，原图临时保存 30 分钟' : '当前截图未保留无损原图，请重新生成截图'"
+                                :title="item.originalDownloadURL ? '下载有损压缩前的 PNG 原图' : '当前截图未保留无损原图，请重新生成截图'"
                                 @click.stop="$emit('download-original', item)"
                             >
                                 {{ downloadingOriginalIds.includes(item.id) ? '下载中...' : '下载无损原图' }}
