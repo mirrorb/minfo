@@ -9,15 +9,29 @@ import (
 	"sort"
 	"strings"
 
+	screenshotdelivery "minfo/internal/screenshot/delivery"
 	"minfo/internal/system"
 )
 
-// compressOversizedPNGIfNeeded 会在 PNG 截图过大时依次尝试无损和有损压缩。
+// processPNG 仅在图床上传时允许有损压缩，直接下载始终保留无损像素。
+func (r *screenshotRunner) processPNG(path string) {
+	if r.allowLossyPNG {
+		r.compressOversizedPNGIfNeeded(path)
+		return
+	}
+	r.logf("[信息] %s 仅使用 oxipng 无损优化，不执行有损压缩。", filepath.Base(path))
+	if err := r.compressOxiPNG(path); err != nil {
+		r.logf("[警告] %s oxipng 优化失败，保留无损截图：%s", filepath.Base(path), err)
+	}
+}
+
+// compressOversizedPNGIfNeeded 会按图床限制依次尝试无损和有损压缩。
 func (r *screenshotRunner) compressOversizedPNGIfNeeded(path string) {
 	info, err := os.Stat(path)
 	if err != nil || info.Size() <= oversizeBytes {
 		return
 	}
+	r.logf("[提示] %s 超过图床大小限制，先使用 oxipng 压缩...", filepath.Base(path))
 
 	if err := r.compressOxiPNG(path); err != nil {
 		r.logf("[警告] %s oxipng 压缩失败，保留当前截图：%s", filepath.Base(path), err.Error())
@@ -39,7 +53,7 @@ func (r *screenshotRunner) compressOversizedPNGIfNeeded(path string) {
 		r.logf("[警告] %s pngquant 压缩失败，保留 oxipng 结果：%s", filepath.Base(path), err.Error())
 		return
 	}
-	r.logf("[警告] %s 已使用 pngquant 有损压缩。若介意画质损失，可切换 JPG 重新生成。", filepath.Base(path))
+	r.logf("[警告] %s 已使用 pngquant 有损压缩。可下载无损原图或切换 JPG 重新生成。", filepath.Base(path))
 
 	finalInfo, err := os.Stat(path)
 	if err != nil {
@@ -85,6 +99,10 @@ func (r *screenshotRunner) compressPNGQuant(path string) error {
 		return fmt.Errorf(system.BestErrorMessage(err, stderr, stdout))
 	}
 
+	if err := screenshotdelivery.PreserveOriginalPNG(path); err != nil {
+		_ = os.Remove(compressedPath)
+		return fmt.Errorf("保留无损原图失败: %w", err)
+	}
 	if err := os.Rename(compressedPath, path); err != nil {
 		_ = os.Remove(compressedPath)
 		return err

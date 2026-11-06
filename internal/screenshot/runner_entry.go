@@ -21,7 +21,7 @@ type resolvedScreenshotSources struct {
 }
 
 // runEngineScreenshotsWithLiveLogs 会解析输入源、生成随机时间点，并启动带实时日志的截图引擎流程。
-func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, count int, onLog LogHandler) (ScreenshotsResult, error) {
+func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, count int, allowLossyPNG bool, onLog LogHandler) (ScreenshotsResult, error) {
 	sources, err := resolveScreenshotSources(ctx, inputPath, onLog)
 	if err != nil {
 		return ScreenshotsResult{}, err
@@ -33,18 +33,18 @@ func runEngineScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir,
 		return ScreenshotsResult{}, err
 	}
 
-	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, onLog)
+	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, allowLossyPNG, onLog)
 }
 
 // runEngineScreenshotsAtTimestampsWithLiveLogs 会解析输入源，并按指定时间点执行截图流程。
-func runEngineScreenshotsAtTimestampsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
+func runEngineScreenshotsAtTimestampsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, allowLossyPNG bool, onLog LogHandler) (ScreenshotsResult, error) {
 	sources, err := resolveScreenshotSources(ctx, inputPath, onLog)
 	if err != nil {
 		return ScreenshotsResult{}, err
 	}
 	defer sources.cleanup()
 
-	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, onLog)
+	return runScreenshotsFromSource(ctx, sources.sourcePath, sources.dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, allowLossyPNG, onLog)
 }
 
 // resolveScreenshotSources 会把外部输入路径解析为截图主媒体源和 DVD 附加探测源。
@@ -89,8 +89,9 @@ func generateScreenshotTimestamps(ctx context.Context, sourcePath string, count 
 }
 
 // runScreenshotsFromSource 会基于已经解析好的媒体源创建运行器，并执行一次完整截图任务。
-func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
+func runScreenshotsFromSource(ctx context.Context, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, allowLossyPNG bool, onLog LogHandler) (ScreenshotsResult, error) {
 	runner := newScreenshotRunner(ctx, sourcePath, dvdMediaInfoPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, onLog)
+	runner.allowLossyPNG = allowLossyPNG
 	defer runner.cleanupTemporarySubtitleResources()
 
 	runner.logRuntimeBootstrap()

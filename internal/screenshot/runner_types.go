@@ -17,6 +17,7 @@ type screenshotRunner struct {
 	subtitleMode     string
 	hdrProcessor     string
 	sizeMode         string
+	allowLossyPNG    bool
 	requested        []float64
 	settings         screenshotruntime.VariantSettings
 	tools            screenshotruntime.Toolchain

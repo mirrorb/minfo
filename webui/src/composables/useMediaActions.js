@@ -6,6 +6,7 @@ import {
     createInfoJob,
     createScreenshotJob,
     createTorrentJob,
+    downloadOriginalPNG,
     fetchInfoJob,
     fetchScreenshotJob,
     fetchTorrentJob,
@@ -17,6 +18,7 @@ import { buildBBCodeText, buildCopyText, buildLinkText, copyText, extractDirectL
 export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotSizeMode, screenshotCount, pixhostDomain, uploadProxyURL, hasInput) {
     const outputText = ref("");
     const linkItems = ref([]);
+    const downloadingOriginalIds = ref([]);
     const busy = ref(false);
     const activeAction = ref("");
     const activePanel = ref("");
@@ -590,6 +592,25 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         });
     };
 
+    const downloadLosslessOriginal = async (item) => {
+        if (busy.value || downloadingOriginalIds.value.includes(item?.id)) {
+            return;
+        }
+        if (!item?.isLossy || !item.originalDownloadURL) {
+            showNotice("当前截图未保留无损原图，请重新生成截图。");
+            return;
+        }
+        downloadingOriginalIds.value.push(item.id);
+        try {
+            await downloadOriginalPNG(item.originalDownloadURL, item.filename);
+            showNotice("无损原图已开始下载。", "success");
+        } catch (err) {
+            showNotice(err?.message || "无损原图下载失败。");
+        } finally {
+            downloadingOriginalIds.value = downloadingOriginalIds.value.filter((id) => id !== item.id);
+        }
+    };
+
     const resumePersistedTask = async () => {
         const persistedTask = loadActiveTask();
         if (!persistedTask) {
@@ -757,6 +778,8 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
         makeTorrent,
         appendShotLinks,
         rerenderLossyLinkAsJPG,
+        downloadLosslessOriginal,
+        downloadingOriginalIds,
         stopActiveTask,
         clearOutputText,
         clearLinkItems,
@@ -952,6 +975,7 @@ function decorateLossyLinkItems(links, lossyIndexes = [], lossyFiles = []) {
         return {
             url: normalized.url,
             thumbnailURL: normalized.thumbnailURL,
+            originalDownloadURL: normalized.originalDownloadURL,
             filename,
             size: normalized.size,
             width: normalized.width,
@@ -988,6 +1012,7 @@ function normalizeDecoratedLinkInput(value) {
     return {
         url: typeof value.url === "string" ? value.url : "",
         thumbnailURL: typeof value.thumbnailURL === "string" ? value.thumbnailURL : "",
+        originalDownloadURL: typeof value.originalDownloadURL === "string" ? value.originalDownloadURL : "",
         filename: typeof value.filename === "string" ? value.filename.trim() : "",
         size: normalizePositiveInteger(value.size),
         width: normalizePositiveInteger(value.width),

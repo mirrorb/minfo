@@ -69,6 +69,7 @@ export function normalizeOutputLinks(items) {
             id: typeof item?.id === "string" && item.id.trim() !== "" ? item.id : buildLinkId(),
             url,
             thumbnailURL: normalizeOptionalDirectLink(item?.thumbnailURL),
+            originalDownloadURL: typeof item?.originalDownloadURL === "string" ? item.originalDownloadURL.trim() : "",
             filename: typeof item?.filename === "string" ? item.filename : "",
             size: normalizeLinkSize(item?.size),
             width: normalizeLinkDimension(item?.width),
@@ -102,6 +103,7 @@ export function mergeOutputLinks(existingItems, incomingLinks) {
             id: buildLinkId(),
             url,
             thumbnailURL: normalizedLink.thumbnailURL,
+            originalDownloadURL: normalizedLink.originalDownloadURL,
             filename: normalizedLink.filename,
             size: normalizedLink.size,
             width: normalizedLink.width,
@@ -196,6 +198,7 @@ function normalizeIncomingLink(value) {
     return {
         url: normalizeDirectLink(value.url),
         thumbnailURL: normalizeOptionalDirectLink(value.thumbnailURL),
+        originalDownloadURL: typeof value.originalDownloadURL === "string" ? value.originalDownloadURL.trim() : "",
         filename: typeof value.filename === "string" ? value.filename.trim() : "",
         size: normalizeLinkSize(value.size),
         width: normalizeLinkDimension(value.width),

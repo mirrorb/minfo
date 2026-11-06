@@ -163,6 +163,7 @@
             :copy-b-b-code-label="copyBBCodeLabel"
             :link-status-text="linkStatusText"
             :link-items="linkItems"
+            :downloading-original-ids="downloadingOriginalIds"
             :task-progress="taskProgress"
             @append-links="appendShotLinks"
             @stop-active="stopActiveTask"
@@ -172,6 +173,7 @@
             @clear="clearLinkItems"
             @remove-link="removeLink"
             @rerender-jpg="rerenderLossyLinkAsJPG"
+            @download-original="downloadLosslessOriginal"
         />
 
     </main>
@@ -271,6 +273,7 @@ const {
 const {
     outputText,
     linkItems,
+    downloadingOriginalIds,
     busy,
     activeAction,
     stoppingAction,
@@ -298,6 +301,7 @@ const {
     copyLinkItem,
     removeLink,
     rerenderLossyLinkAsJPG,
+    downloadLosslessOriginal,
 } = mediaActions;
 
 const handleTorrentSubmit = async (options) => {

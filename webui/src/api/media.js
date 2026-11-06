@@ -99,6 +99,31 @@ export async function cancelScreenshotJob(jobId) {
     return data;
 }
 
+export async function downloadOriginalPNG(url, filename) {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+        const data = await safeReadJSON(response);
+        throw new Error(data.error || "无损原图下载失败，请重新生成截图。");
+    }
+    const downloadURL = URL.createObjectURL(await response.blob());
+    try {
+        startPreparedDownload(downloadURL, filename || "screenshot.png");
+    } finally {
+        setTimeout(() => URL.revokeObjectURL(downloadURL), 1000);
+    }
+}
+
+export async function deleteOriginalPNG(url) {
+    if (typeof url !== "string" || !/^\/api\/screenshot-original\?token=[a-f0-9]{32}$/.test(url)) {
+        return;
+    }
+    const response = await fetch(url, { method: "DELETE", keepalive: true, cache: "no-store" });
+    if (!response.ok) {
+        const data = await safeReadJSON(response);
+        throw new Error(data.error || "无损原图清理失败。");
+    }
+}
+
 export async function createTorrentJob(path, options = {}) {
     const response = await postForm("/api/torrent-jobs", {
         path,
@@ -305,6 +330,7 @@ function normalizeLinkItems(items) {
         .map((item) => ({
             url: typeof item.url === "string" ? item.url : "",
             thumbnailURL: typeof item.thumbnail_url === "string" ? item.thumbnail_url : "",
+            originalDownloadURL: typeof item.original_download_url === "string" ? item.original_download_url : "",
             filename: typeof item.filename === "string" ? item.filename : "",
             size: normalizePositiveInteger(item.size),
             width: normalizePositiveInteger(item.width),

@@ -28,17 +28,15 @@ func (r *screenshotRunner) captureScreenshot(aligned float64, path string) error
 	if err != nil {
 		return err
 	}
+	if r.variant != VariantJPG {
+		r.processPNG(path)
+		return nil
+	}
 	if info.Size() <= oversizeBytes {
 		return nil
 	}
 
 	sizeMB := float64(info.Size()) / 1024.0 / 1024.0
-	if r.variant != VariantJPG {
-		r.logf("[提示] %s 大小 %.2fMB，先使用 oxipng 压缩...", filepath.Base(path), sizeMB)
-		r.compressOversizedPNGIfNeeded(path)
-		return nil
-	}
-
 	r.logf("[提示] %s 大小 %.2fMB，重拍降低质量...", filepath.Base(path), sizeMB)
 	tempPath := path + ".tmp" + r.settings.Ext
 	r.activeShot.SetPhase(screenshotruntime.ActiveShotPhaseReencode)

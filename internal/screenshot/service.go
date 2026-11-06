@@ -27,12 +27,12 @@ func RunScreenshotsWithLogs(ctx context.Context, inputPath, outputDir, variant, 
 
 // RunScreenshotsWithLiveLogs 会执行截图流程，并把实时日志通过回调逐行暴露给调用方。
 func RunScreenshotsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, count int, onLog LogHandler) (ScreenshotsResult, error) {
-	return runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, count, onLog)
+	return runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, count, false, onLog)
 }
 
 // RunScreenshotsAtTimestampsWithLiveLogs 会按指定时间点执行截图流程。
 func RunScreenshotsAtTimestampsWithLiveLogs(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, onLog LogHandler) (ScreenshotsResult, error) {
-	return runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, onLog)
+	return runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, false, onLog)
 }
 
 // RunUpload 执行截图加上传流程并仅返回直链输出。
@@ -66,7 +66,7 @@ func RunUploadWithLiveEvents(ctx context.Context, inputPath, outputDir, variant,
 
 // RunUploadWithLiveEventsWithOptions 会按指定上传选项执行截图加上传流程，并逐步暴露实时事件。
 func RunUploadWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, count int, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
-	screenshotResult, err := runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, count, onLog)
+	screenshotResult, err := runEngineScreenshotsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, count, true, onLog)
 	if err != nil {
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
@@ -76,7 +76,7 @@ func RunUploadWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDi
 
 // RunUploadAtTimestampsWithLiveEventsWithOptions 会按指定时间点截图并上传。
 func RunUploadAtTimestampsWithLiveEventsWithOptions(ctx context.Context, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode string, timestamps []string, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
-	screenshotResult, err := runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, onLog)
+	screenshotResult, err := runEngineScreenshotsAtTimestampsWithLiveLogs(ctx, inputPath, outputDir, variant, subtitleMode, hdrProcessor, sizeMode, timestamps, true, onLog)
 	if err != nil {
 		return UploadResult{Logs: screenshotResult.Logs}, err
 	}
@@ -91,7 +91,17 @@ func NormalizePixhostDomain(value string) (string, error) {
 
 // uploadScreenshotResult 会上传截图结果，并合并截图与上传阶段日志。
 func uploadScreenshotResult(ctx context.Context, screenshotResult ScreenshotsResult, options UploadOptions, onLog LogHandler, onItem UploadItemHandler) (UploadResult, error) {
-	uploadResult, err := screenshotpixhost.UploadImagesWithOptions(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, oversizeBytes, options, onLog, onItem)
+	originalURLs, originalLogs := prepareOriginalPNGDownloads(screenshotResult, onLog)
+	screenshotResult.Logs = mergeUploadLogs(screenshotResult.Logs, originalLogs)
+	uploadResult, err := screenshotpixhost.UploadImagesWithOptions(ctx, screenshotResult.Files, screenshotResult.LossyPNGFiles, oversizeBytes, options, onLog, func(item UploadedImage) {
+		item.OriginalDownloadURL = originalURLs[item.Filename]
+		if onItem != nil {
+			onItem(item)
+		}
+	})
+	for index := range uploadResult.Items {
+		uploadResult.Items[index].OriginalDownloadURL = originalURLs[uploadResult.Items[index].Filename]
+	}
 	logs := mergeUploadLogs(screenshotResult.Logs, uploadResult.Logs)
 	if err != nil {
 		return UploadResult{

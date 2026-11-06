@@ -86,6 +86,16 @@
                         <div class="output-link-actions">
                             <button
                                 v-if="item.isLossy"
+                                class="ghost output-link-original"
+                                type="button"
+                                :disabled="busy || !item.originalDownloadURL || downloadingOriginalIds.includes(item.id)"
+                                :title="item.originalDownloadURL ? '下载有损压缩前的 PNG 原图，原图临时保存 30 分钟' : '当前截图未保留无损原图，请重新生成截图'"
+                                @click.stop="$emit('download-original', item)"
+                            >
+                                {{ downloadingOriginalIds.includes(item.id) ? '下载中...' : '下载无损原图' }}
+                            </button>
+                            <button
+                                v-if="item.isLossy"
                                 class="ghost output-link-rerender"
                                 type="button"
                                 :disabled="busy"
@@ -121,8 +131,9 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, ref, toRef, watch } from "vue";
 import TaskProgressBar from "./TaskProgressBar.vue";
+import { useOriginalPNGCleanup } from "../composables/useOriginalPNGCleanup.js";
 import { formatFileSize } from "../utils/path-browser";
 
 const props = defineProps({
@@ -133,10 +144,13 @@ const props = defineProps({
     copyBBCodeLabel: { type: String, required: true },
     linkStatusText: { type: String, required: true },
     linkItems: { type: Array, required: true },
+    downloadingOriginalIds: { type: Array, default: () => [] },
     taskProgress: { type: Object, default: null },
 });
 
-const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "copy-link", "clear", "remove-link", "rerender-jpg"]);
+const emit = defineEmits(["append-links", "stop-active", "copy-links", "copy-bbcode", "copy-link", "clear", "remove-link", "rerender-jpg", "download-original"]);
+
+useOriginalPNGCleanup(toRef(props, "linkItems"));
 
 const previewStateMap = ref({});
 const lossyTooltip = "为满足图床要求该图片已被有损压缩";
@@ -492,6 +506,7 @@ const markError = (id) => {
 
 .output-link-actions {
     display: flex;
+    flex-wrap: wrap;
     flex-direction: row;
     align-items: center;
     justify-self: end;
@@ -514,6 +529,13 @@ const markError = (id) => {
     color: #8a3a00;
     border-color: rgba(249, 115, 22, 0.42);
     background: rgba(245, 158, 11, 0.16);
+}
+
+.output-link-original {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--accent);
 }
 
 .output-link-rerender svg {

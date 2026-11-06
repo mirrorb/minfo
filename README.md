@@ -11,6 +11,8 @@
 - 输出 `BDInfo` 信息，支持精简报告和完整报告，底层使用 [tetrahydroc/BDInfoCLI](https://github.com/tetrahydroc/BDInfoCLI)
 - 生成截图并打包为 ZIP 下载
 - 生成截图后上传到 `Pixhost`
+- 有损压缩的 PNG 支持重拍 JPG 或下载无损原图；图床窗口或对应条目消失时主动清理原图，并保留 30 分钟过期清理作为兜底
+- PNG 截图下载仅使用 oxipng 无损优化，不受图床大小限制，不执行有损压缩
 - 截图支持 `PNG` / `JPG`
 - 像素宽高比 (SAR) 支持智能和原始像素；智能模式在像素宽高比偏差不超过 0.5% 时保留原始像素尺寸
 - 色彩标准支持 `SDR` / `HDR` / `Dolby Vision`
