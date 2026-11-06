@@ -3,8 +3,57 @@ package handlers
 import (
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestScreenshotSizeModeFormAndQuery(t *testing.T) {
+	for input, want := range map[string]string{
+		"": "auto", "invalid": "auto", "auto": "auto", "original": "original", "display": "auto",
+	} {
+		t.Run(input, func(t *testing.T) {
+			values := url.Values{"size_mode": {input}}
+			form, err := http.NewRequest(http.MethodPost, "/api/screenshots", strings.NewReader(values.Encode()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			form.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			query, err := http.NewRequest(http.MethodGet, "/api/screenshots?"+values.Encode(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := normalizeScreenshotFormOptions(form).SizeMode; got != want {
+				t.Errorf("form size mode = %q, want %q", got, want)
+			}
+			if got := normalizeScreenshotQueryOptions(query).SizeMode; got != want {
+				t.Errorf("query size mode = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestParseScreenshotRequestKeepsSizeMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "video.mkv")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	values := url.Values{"path": {path}, "size_mode": {"original"}, "timestamp": {"00:01:02"}}
+	request, err := http.NewRequest(http.MethodPost, "/api/screenshot-jobs", strings.NewReader(values.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	parsed, err := parseScreenshotFormRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parsed.Cleanup()
+	if parsed.SizeMode != "original" || parsed.Count != 1 || len(parsed.Timestamps) != 1 {
+		t.Fatalf("unexpected screenshot request: %#v", parsed)
+	}
+}
 
 func TestNormalizeProxyURLAllowsEmptyValue(t *testing.T) {
 	proxyURL, err := normalizeProxyURL(" ")

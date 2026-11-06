@@ -25,6 +25,9 @@ const (
 
 	HDRProcessorLibplacebo = "libplacebo"
 	HDRProcessorZscale     = "zscale"
+
+	SizeModeAuto     = "auto"
+	SizeModeOriginal = "original"
 )
 
 // ScreenshotsResult 表示一次截图流程返回的文件列表和日志。

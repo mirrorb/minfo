@@ -47,6 +47,16 @@ func NormalizeHDRProcessor(raw string) string {
 	}
 }
 
+// NormalizeSizeMode 规范化 SAR 处理模式；缺省、旧值或未知值使用智能校正。
+func NormalizeSizeMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case SizeModeOriginal:
+		return SizeModeOriginal
+	default:
+		return SizeModeAuto
+	}
+}
+
 // NormalizeCount 规范化截图数量，并限制在允许范围内。
 func NormalizeCount(raw string) int {
 	value := strings.TrimSpace(raw)

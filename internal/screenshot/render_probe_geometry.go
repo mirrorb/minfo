@@ -12,6 +12,9 @@ import (
 	"minfo/internal/system"
 )
 
+// 智能校正允许 0.5% 的像素宽高比偏差，比较时不受输出尺寸取偶数影响。
+const autoSARTolerance = 0.005
+
 // buildDisplayAspectFilter 会构建显示参数显示比例过滤器，为后续流程准备好可直接使用的结果。
 func buildDisplayAspectFilter() string {
 	// DVD/VOB and other anamorphic sources often use non-square pixels.
@@ -30,7 +33,8 @@ func (r *screenshotRunner) detectDisplayGeometry() (string, int, int) {
 		r.sourcePath,
 	)
 	if err != nil {
-		return buildDisplayAspectFilter(), r.media.VideoWidth, r.media.VideoHeight
+		r.logf("[提示] 显示比例探测失败，将按所选像素宽高比 (SAR) 模式处理。")
+		return r.resolveDisplayGeometry(r.media.VideoWidth, r.media.VideoHeight, "", "")
 	}
 
 	width := 0
@@ -50,6 +54,12 @@ func (r *screenshotRunner) detectDisplayGeometry() (string, int, int) {
 			dar = strings.TrimSpace(strings.TrimPrefix(line, "display_aspect_ratio="))
 		}
 	}
+	if width <= 0 {
+		width = r.media.VideoWidth
+	}
+	if height <= 0 {
+		height = r.media.VideoHeight
+	}
 
 	if screenshotsource.LooksLikeDVDSource(r.sourcePath) {
 		mediainfoDAR := ""
@@ -64,15 +74,59 @@ func (r *screenshotRunner) detectDisplayGeometry() (string, int, int) {
 			screenshottimestamps.DisplayProbeValue(mediainfoDAR),
 		)
 		if width2, height2, filter, ok := r.detectDVDDisplayAspectFilterFromMediaInfo(width, height); ok {
-			r.logf("[信息] DVD 比例修正将直接使用 mediainfo DAR：%s", filter)
-			displayWidth, displayHeight := detectDisplayDimensionsForMetadata(width2, height2, "", filter)
-			return buildDisplayAspectFilterForMetadata(width2, height2, "", filter), displayWidth, displayHeight
+			r.logf("[信息] DVD 显示比例元数据采用 mediainfo DAR：%s", filter)
+			return r.resolveDisplayGeometry(width2, height2, "", filter)
 		}
 		r.logf("[提示] mediainfo 未提供可用 DVD 比例，回退 ffprobe SAR/DAR。")
 	}
 
-	displayWidth, displayHeight := detectDisplayDimensionsForMetadata(width, height, sar, dar)
-	return buildDisplayAspectFilterForMetadata(width, height, sar, dar), displayWidth, displayHeight
+	return r.resolveDisplayGeometry(width, height, sar, dar)
+}
+
+// resolveDisplayGeometry 将所选模式应用到视频和字幕共用的目标尺寸，并记录决策。
+func (r *screenshotRunner) resolveDisplayGeometry(width, height int, sar, dar string) (string, int, int) {
+	mode := NormalizeSizeMode(r.sizeMode)
+	filter, outputWidth, outputHeight := screenshotGeometryForMetadata(width, height, sar, dar, mode)
+	modeLabel := "智能校正"
+	if mode == SizeModeOriginal {
+		modeLabel = "原始像素"
+	}
+	reason := "保持原始尺寸，不进行宽高比缩放"
+	if strings.Contains(filter, "scale=") {
+		reason = "按显示比例缩放并将宽度向下取偶数"
+	} else if mode == SizeModeAuto {
+		reason = fmt.Sprintf("像素宽高比偏差不超过 %.1f%% 或比例未知，保留原始尺寸", autoSARTolerance*100)
+	}
+	r.logf("[信息] 像素宽高比 (SAR)：%s | %dx%d -> %dx%d | SAR=%s DAR=%s | %s",
+		modeLabel, width, height, outputWidth, outputHeight,
+		screenshottimestamps.DisplayProbeValue(sar), screenshottimestamps.DisplayProbeValue(dar), reason,
+	)
+	return filter, outputWidth, outputHeight
+}
+
+// screenshotGeometryForMetadata 为两种 SAR 处理模式同时确定滤镜和字幕目标尺寸。
+func screenshotGeometryForMetadata(width, height int, sar, dar, mode string) (string, int, int) {
+	mode = NormalizeSizeMode(mode)
+	if mode == SizeModeOriginal || (mode == SizeModeAuto && isNearSquarePixelGeometry(width, height, sar, dar)) {
+		return "setsar=1", width, height
+	}
+	outputWidth, outputHeight := detectDisplayDimensionsForMetadata(width, height, sar, dar)
+	return buildDisplayAspectFilterForMetadata(width, height, sar, dar), outputWidth, outputHeight
+}
+
+func isNearSquarePixelGeometry(width, height int, sar, dar string) bool {
+	// 保留现有 DAR 优先规则，兼容 DVD 的 MediaInfo 显示比例修正。
+	_, _, hasSAR := parseAspectRatio(sar)
+	if width > 0 && height > 0 {
+		rawAspect := float64(width) / float64(height)
+		if displayAspect, ok := parseAspectRatioValue(screenshotdvdinfo.NormalizeAspectRatio(dar)); ok && (!hasSAR || math.Abs(displayAspect-rawAspect) > 0.02) {
+			return math.Abs(displayAspect/rawAspect-1) <= autoSARTolerance+1e-12
+		}
+	}
+	if num, den, ok := parseAspectRatio(sar); ok {
+		return math.Abs(float64(num)/float64(den)-1) <= autoSARTolerance+1e-12
+	}
+	return true
 }
 
 // detectDVDDisplayAspectFilterFromMediaInfo 会从 mediainfo 结果中提取 DVD 比例修正所需参数。
@@ -94,17 +148,18 @@ func (r *screenshotRunner) detectDVDDisplayAspectFilterFromMediaInfo(width, heig
 
 // buildDisplayAspectFilterForMetadata 根据视频宽高和宽高比元数据生成静态截图所需的比例修正链。
 func buildDisplayAspectFilterForMetadata(width, height int, sar, dar string) string {
+	_, _, hasSAR := parseAspectRatio(sar)
 	if width > 0 && height > 0 {
 		normalizedDAR := screenshotdvdinfo.NormalizeAspectRatio(dar)
 		if darNum, darDen, ok := parseAspectRatio(normalizedDAR); ok {
 			rawAspect := float64(width) / float64(height)
 			displayAspect := float64(darNum) / float64(darDen)
-			if math.Abs(displayAspect-rawAspect) > 0.02 {
+			if !hasSAR || math.Abs(displayAspect-rawAspect) > 0.02 {
 				return fmt.Sprintf("scale='trunc(ih*%d/%d/2)*2:ih',setsar=1", darNum, darDen)
 			}
 		} else if displayAspect, ok := parseAspectRatioValue(normalizedDAR); ok {
 			rawAspect := float64(width) / float64(height)
-			if math.Abs(displayAspect-rawAspect) > 0.02 {
+			if !hasSAR || math.Abs(displayAspect-rawAspect) > 0.02 {
 				return fmt.Sprintf("scale='trunc(ih*%.6f/2)*2:ih',setsar=1", displayAspect)
 			}
 		}
@@ -123,17 +178,18 @@ func detectDisplayDimensionsForMetadata(width, height int, sar, dar string) (int
 	if width <= 0 || height <= 0 {
 		return 0, 0
 	}
+	_, _, hasSAR := parseAspectRatio(sar)
 
 	normalizedDAR := screenshotdvdinfo.NormalizeAspectRatio(dar)
 	if darNum, darDen, ok := parseAspectRatio(normalizedDAR); ok {
 		rawAspect := float64(width) / float64(height)
 		displayAspect := float64(darNum) / float64(darDen)
-		if math.Abs(displayAspect-rawAspect) > 0.02 {
+		if !hasSAR || math.Abs(displayAspect-rawAspect) > 0.02 {
 			return evenFloorDimension(float64(height) * displayAspect), height
 		}
 	} else if displayAspect, ok := parseAspectRatioValue(normalizedDAR); ok {
 		rawAspect := float64(width) / float64(height)
-		if math.Abs(displayAspect-rawAspect) > 0.02 {
+		if !hasSAR || math.Abs(displayAspect-rawAspect) > 0.02 {
 			return evenFloorDimension(float64(height) * displayAspect), height
 		}
 	}

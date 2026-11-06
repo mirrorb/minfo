@@ -91,11 +91,11 @@ type PathItem struct {
 	Duration string `json:"duration,omitempty"`
 }
 
-// PathResponse 表示路径联想接口的 JSON 响应。
+// PathResponse 表示路径联想接口的 JSON 响应；空目录也需要保留 items 数组。
 type PathResponse struct {
 	OK    bool       `json:"ok"`
 	Root  string     `json:"root,omitempty"`
 	Roots []string   `json:"roots,omitempty"`
-	Items []PathItem `json:"items,omitempty"`
+	Items []PathItem `json:"items"`
 	Error string     `json:"error,omitempty"`
 }

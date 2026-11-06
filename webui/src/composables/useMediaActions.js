@@ -14,7 +14,7 @@ import {
 import { clearActiveTask, loadActiveTask, saveActiveTask } from "../utils/storage";
 import { buildBBCodeText, buildCopyText, buildLinkText, copyText, extractDirectLinks, mergeOutputLinks } from "../utils/output";
 
-export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, pixhostDomain, uploadProxyURL, hasInput) {
+export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotSizeMode, screenshotCount, pixhostDomain, uploadProxyURL, hasInput) {
     const outputText = ref("");
     const linkItems = ref([]);
     const busy = ref(false);
@@ -342,7 +342,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
 
             let trackedTask = baseTask;
             if (jobId === "") {
-                const job = await createScreenshotJob(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotHDRProcessor.value, screenshotCount.value, "zip");
+                const job = await createScreenshotJob(path.value.trim(), screenshotVariant.value, screenshotSubtitleMode.value, screenshotHDRProcessor.value, screenshotSizeMode.value, screenshotCount.value, "zip");
                 applyDownloadProgress(job.status, job.progress);
                 trackedTask = {
                     ...baseTask,
@@ -411,6 +411,7 @@ export function useMediaActions(path, screenshotVariant, screenshotSubtitleMode,
                     variant || screenshotVariant.value,
                     screenshotSubtitleMode.value,
                     screenshotHDRProcessor.value,
+                    screenshotSizeMode.value,
                     count > 0 ? count : requestedTimestamps.length > 0 ? requestedTimestamps.length : screenshotCount.value,
                     "links",
                     uploadProxyURL.value.trim(),

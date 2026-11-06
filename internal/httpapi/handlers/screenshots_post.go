@@ -59,6 +59,7 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 			request.Variant,
 			request.SubtitleMode,
 			request.HDRProcessor,
+			request.SizeMode,
 			request.Count,
 			screenshot.UploadOptions{
 				ProxyURL: request.ProxyURL,
@@ -88,7 +89,7 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldPrepareDownload(r) {
-		downloadURL, logs, err := prepareScreenshotZipDownload(ctx, request.InputPath, tempDir, request.Variant, request.SubtitleMode, request.HDRProcessor, request.Count, logger.LogLine)
+		downloadURL, logs, err := prepareScreenshotZipDownload(ctx, request.InputPath, tempDir, request.Variant, request.SubtitleMode, request.HDRProcessor, request.SizeMode, request.Count, logger.LogLine)
 		if err != nil {
 			transport.WriteJSON(w, http.StatusInternalServerError, transport.InfoResponse{
 				OK:         false,
@@ -107,7 +108,7 @@ func handleScreenshotsPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := writeScreenshotZipResponse(ctx, w, request.InputPath, tempDir, request.Variant, request.SubtitleMode, request.HDRProcessor, request.Count); err != nil {
+	if err := writeScreenshotZipResponse(ctx, w, request.InputPath, tempDir, request.Variant, request.SubtitleMode, request.HDRProcessor, request.SizeMode, request.Count); err != nil {
 		transport.WriteError(w, http.StatusInternalServerError, err.Error())
 	}
 }

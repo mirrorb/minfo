@@ -6,6 +6,7 @@ const DEFAULT_STATE = {
     screenshotVariant: "png",
     screenshotSubtitleMode: "auto",
     screenshotHDRProcessor: "libplacebo",
+    screenshotSizeMode: "auto",
     screenshotCount: 4,
     pixhostDomain: "pixhost.to",
     uploadProxyURL: "",
@@ -98,6 +99,7 @@ function normalizeState(value) {
         screenshotVariant: normalizeVariant(source.screenshotVariant),
         screenshotSubtitleMode: normalizeSubtitleMode(source.screenshotSubtitleMode),
         screenshotHDRProcessor: normalizeHDRProcessor(source.screenshotHDRProcessor),
+        screenshotSizeMode: normalizeSizeMode(source.screenshotSizeMode),
         screenshotCount: normalizeScreenshotCount(source.screenshotCount),
         pixhostDomain: normalizePixhostDomain(source.pixhostDomain),
         uploadProxyURL: normalizeUploadProxyURL(source.uploadProxyURL),
@@ -165,6 +167,10 @@ function normalizeSubtitleMode(value) {
 
 function normalizeHDRProcessor(value) {
     return value === "zscale" ? "zscale" : DEFAULT_STATE.screenshotHDRProcessor;
+}
+
+function normalizeSizeMode(value) {
+    return value === "original" ? "original" : DEFAULT_STATE.screenshotSizeMode;
 }
 
 function normalizeBDInfoMode(value) {

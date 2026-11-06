@@ -22,6 +22,7 @@ type screenshotRequest struct {
 	Variant       string
 	SubtitleMode  string
 	HDRProcessor  string
+	SizeMode      string
 	Count         int
 	ProxyURL      string
 	PixhostDomain string
@@ -33,6 +34,7 @@ type screenshotRunOptions struct {
 	Variant      string
 	SubtitleMode string
 	HDRProcessor string
+	SizeMode     string
 	Count        int
 }
 
@@ -72,6 +74,7 @@ func parseScreenshotFormRequest(r *http.Request) (screenshotRequest, error) {
 		Variant:       options.Variant,
 		SubtitleMode:  options.SubtitleMode,
 		HDRProcessor:  options.HDRProcessor,
+		SizeMode:      options.SizeMode,
 		Count:         options.Count,
 		ProxyURL:      proxyURL,
 		PixhostDomain: pixhostDomain,
@@ -85,6 +88,7 @@ func normalizeScreenshotFormOptions(r *http.Request) screenshotRunOptions {
 		Variant:      screenshot.NormalizeVariant(r.FormValue("variant")),
 		SubtitleMode: screenshot.NormalizeSubtitleMode(r.FormValue("subtitle_mode")),
 		HDRProcessor: screenshot.NormalizeHDRProcessor(r.FormValue("hdr_processor")),
+		SizeMode:     screenshot.NormalizeSizeMode(r.FormValue("size_mode")),
 		Count:        screenshot.NormalizeCount(r.FormValue("count")),
 	}
 }
@@ -95,6 +99,7 @@ func normalizeScreenshotQueryOptions(r *http.Request) screenshotRunOptions {
 		Variant:      screenshot.NormalizeVariant(r.URL.Query().Get("variant")),
 		SubtitleMode: screenshot.NormalizeSubtitleMode(r.URL.Query().Get("subtitle_mode")),
 		HDRProcessor: screenshot.NormalizeHDRProcessor(r.URL.Query().Get("hdr_processor")),
+		SizeMode:     screenshot.NormalizeSizeMode(r.URL.Query().Get("size_mode")),
 		Count:        screenshot.NormalizeCount(r.URL.Query().Get("count")),
 	}
 }

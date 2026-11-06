@@ -37,6 +37,7 @@ type screenshotJob struct {
 	variant         string
 	subtitleMode    string
 	hdrProcessor    string
+	sizeMode        string
 	count           int
 	proxyURL        string
 	pixhostDomain   string
@@ -77,6 +78,7 @@ func createScreenshotJob(request screenshotRequest) (*screenshotJob, error) {
 		variant:       request.Variant,
 		subtitleMode:  request.SubtitleMode,
 		hdrProcessor:  request.HDRProcessor,
+		sizeMode:      request.SizeMode,
 		count:         request.Count,
 		proxyURL:      request.ProxyURL,
 		pixhostDomain: request.PixhostDomain,

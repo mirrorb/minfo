@@ -2,6 +2,17 @@ package screenshot
 
 import "testing"
 
+func TestNormalizeSizeMode(t *testing.T) {
+	for input, want := range map[string]string{
+		"": SizeModeAuto, "auto": SizeModeAuto, "invalid": SizeModeAuto,
+		"original": SizeModeOriginal, " ORIGINAL ": SizeModeOriginal, "display": SizeModeAuto, " DISPLAY ": SizeModeAuto,
+	} {
+		if got := NormalizeSizeMode(input); got != want {
+			t.Errorf("NormalizeSizeMode(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestNormalizeHDRProcessor(t *testing.T) {
 	tests := []struct {
 		name  string

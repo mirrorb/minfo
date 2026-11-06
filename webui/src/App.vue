@@ -48,6 +48,10 @@
                             <label class="field-label-muted">BDInfo 输出</label>
                             <BDInfoOutputPicker v-model="bdinfoMode" :busy="busy" />
                         </div>
+                        <div class="field config-field-wide">
+                            <label class="field-label-muted">像素宽高比 (SAR)</label>
+                            <ScreenshotSizeModePicker v-model="screenshotSizeMode" :busy="busy" />
+                        </div>
                         <div class="field">
                             <label class="field-label-muted">字幕处理</label>
                             <ScreenshotSubtitleModePicker v-model="screenshotSubtitleMode" :busy="busy" />
@@ -183,6 +187,7 @@ import OutputPanel from "./components/OutputPanel.vue";
 import PathBrowser from "./components/PathBrowser.vue";
 import PixhostDomainPicker from "./components/PixhostDomainPicker.vue";
 import ScreenshotHDRProcessorPicker from "./components/ScreenshotHDRProcessorPicker.vue";
+import ScreenshotSizeModePicker from "./components/ScreenshotSizeModePicker.vue";
 import ScreenshotSubtitleModePicker from "./components/ScreenshotSubtitleModePicker.vue";
 import ScreenshotVariantPicker from "./components/ScreenshotVariantPicker.vue";
 import TorrentDialog from "./components/TorrentDialog.vue";
@@ -198,6 +203,7 @@ const persistedState = loadAppState();
 const screenshotVariant = ref(persistedState.screenshotVariant);
 const screenshotSubtitleMode = ref(persistedState.screenshotSubtitleMode);
 const screenshotHDRProcessor = ref(persistedState.screenshotHDRProcessor);
+const screenshotSizeMode = ref(persistedState.screenshotSizeMode);
 const screenshotCount = ref(persistedState.screenshotCount);
 const pixhostDomain = ref(persistedState.pixhostDomain);
 const uploadProxyURL = ref(persistedState.uploadProxyURL);
@@ -214,6 +220,7 @@ const mediaActions = useMediaActions(
     screenshotVariant,
     screenshotSubtitleMode,
     screenshotHDRProcessor,
+    screenshotSizeMode,
     screenshotCount,
     pixhostDomain,
     uploadProxyURL,
@@ -301,14 +308,15 @@ const handleTorrentSubmit = async (options) => {
 };
 
 watch(
-    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotCount, pixhostDomain, uploadProxyURL, configExpanded, bdinfoMode, torrentOptions],
-    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextScreenshotCount, nextPixhostDomain, nextUploadProxyURL, nextConfigExpanded, nextBDInfoMode, nextTorrentOptions]) => {
+    [path, browserDir, screenshotVariant, screenshotSubtitleMode, screenshotHDRProcessor, screenshotSizeMode, screenshotCount, pixhostDomain, uploadProxyURL, configExpanded, bdinfoMode, torrentOptions],
+    ([nextPath, nextBrowserDir, nextVariant, nextSubtitleMode, nextHDRProcessor, nextSizeMode, nextScreenshotCount, nextPixhostDomain, nextUploadProxyURL, nextConfigExpanded, nextBDInfoMode, nextTorrentOptions]) => {
         saveAppState({
             path: nextPath,
             browserDir: nextBrowserDir,
             screenshotVariant: nextVariant,
             screenshotSubtitleMode: nextSubtitleMode,
             screenshotHDRProcessor: nextHDRProcessor,
+            screenshotSizeMode: nextSizeMode,
             screenshotCount: nextScreenshotCount,
             pixhostDomain: nextPixhostDomain,
             uploadProxyURL: nextUploadProxyURL,

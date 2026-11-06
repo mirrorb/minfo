@@ -50,13 +50,14 @@ export async function cancelInfoJob(jobId) {
     return data;
 }
 
-export async function createScreenshotJob(path, variant, subtitleMode, hdrProcessor, count, mode, proxyURL = "", pixhostDomain = "", timestamps = []) {
+export async function createScreenshotJob(path, variant, subtitleMode, hdrProcessor, sizeMode, count, mode, proxyURL = "", pixhostDomain = "", timestamps = []) {
     const response = await postForm("/api/screenshot-jobs", {
         path,
         mode,
         variant,
         subtitle_mode: subtitleMode,
         hdr_processor: hdrProcessor,
+        size_mode: sizeMode,
         count,
         proxy_url: proxyURL,
         pixhost_domain: pixhostDomain,
