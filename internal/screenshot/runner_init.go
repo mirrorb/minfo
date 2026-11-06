@@ -158,6 +158,10 @@ func (r *screenshotRunner) prepareBitmapSubtitleCanvas() {
 
 // prepareColorspaceState 会探测色彩信息并决定是否优先启用 libplacebo。
 func (r *screenshotRunner) prepareColorspaceState() {
+	if r.requestedHDRProcessor() == HDRProcessorOff {
+		r.tools.LibplaceboReady = false
+		return
+	}
 	r.render.ColorInfo = r.detectColorspace()
 	if !shouldUseAdvancedColorspaceChain(r.render.ColorInfo) {
 		return
@@ -188,6 +192,10 @@ func (r *screenshotRunner) finalizeRenderPreparation() {
 
 // logColorspacePlan 会输出当前色彩探测与渲染链的统一日志摘要。
 func (r *screenshotRunner) logColorspacePlan() {
+	if r.requestedHDRProcessor() == HDRProcessorOff {
+		r.logf("[信息] 已禁用 HDR / DV 色彩空间转换，跳过色调映射和色域映射。")
+		return
+	}
 	if r.render.ColorInfo == "" {
 		r.logf("[信息] 无法检测色彩空间，将使用标准转换")
 		return
@@ -218,6 +226,9 @@ func (r *screenshotRunner) requestedHDRProcessor() string {
 func (r *screenshotRunner) effectiveHDRProcessor() string {
 	if r == nil {
 		return NormalizeHDRProcessor("")
+	}
+	if r.requestedHDRProcessor() == HDRProcessorOff {
+		return HDRProcessorOff
 	}
 	if r.tools.LibplaceboReady && r.requestedHDRProcessor() == HDRProcessorLibplacebo {
 		return HDRProcessorLibplacebo

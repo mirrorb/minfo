@@ -45,3 +45,13 @@ test("invalid saved screenshot size modes fall back to automatic", () => {
         assert.equal(loadAppState().screenshotSizeMode, "auto");
     }
 });
+
+test("HDR conversion can remain disabled after saving and reloading", () => {
+    assert.equal(loadAppState().screenshotHDRProcessor, "libplacebo");
+    for (const screenshotHDRProcessor of ["off", "zscale", "libplacebo"]) {
+        saveAppState({ ...loadAppState(), screenshotHDRProcessor });
+        assert.equal(loadAppState().screenshotHDRProcessor, screenshotHDRProcessor);
+    }
+    values.set("minfo:webui:state:v1", JSON.stringify({ screenshotHDRProcessor: "invalid" }));
+    assert.equal(loadAppState().screenshotHDRProcessor, "libplacebo");
+});

@@ -68,7 +68,8 @@
                                     <span class="field-help-trigger" aria-hidden="true">?</span>
                                     <span class="field-help-bubble">
                                         <strong>libplacebo</strong>：HDR / DV 处理更完整，色调映射通常更好，也更适合杜比视界场景<br />
-                                        <strong>zscale</strong>：兼容性更好，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准
+                                        <strong>zscale</strong>：兼容性更好，但 HDR 处理相对保守，且无法正确应用杜比视界元数据，可能出现偏色或映射不准<br />
+                                        <strong>禁用</strong>：不执行 HDR / DV 色调映射和色域映射
                                     </span>
                                 </span>
                             </div>

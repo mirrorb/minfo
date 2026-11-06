@@ -444,6 +444,48 @@ func TestBuildColorspaceChainForHDR(t *testing.T) {
 	}
 }
 
+func TestDisabledHDRProcessorSkipsAllColorMapping(t *testing.T) {
+	for name, info := range map[string]string{
+		"HDR10":        "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|",
+		"HLG":          "color_primaries=bt2020|color_space=bt2020nc|color_transfer=arib-std-b67|",
+		"Dolby Vision": "dolby_vision=1|dv_profile=5|",
+		"BT2020 SDR":   "color_primaries=bt2020|color_space=bt2020nc|color_transfer=bt709|",
+		"SDR":          "color_primaries=bt709|color_space=bt709|color_transfer=bt709|",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if chain := buildColorspaceChain(info, HDRProcessorOff); chain != "" {
+				t.Fatalf("disabled HDR processor must not add color mapping, got %q", chain)
+			}
+		})
+	}
+}
+
+func TestDisabledHDRProcessorDoesNotActivateFallback(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		runner := &screenshotRunner{
+			hdrProcessor: HDRProcessorOff,
+			tools:        screenshotruntime.Toolchain{LibplaceboReady: ready},
+			render: screenshotruntime.RenderState{
+				ColorInfo: "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|",
+			},
+		}
+		if got := runner.effectiveHDRProcessor(); got != HDRProcessorOff {
+			t.Fatalf("effective processor = %q, want off", got)
+		}
+		runner.prepareColorspaceState()
+		runner.finalizeRenderPreparation()
+		if runner.tools.LibplaceboReady || runner.render.ColorChain != "" {
+			t.Fatalf("disabled HDR processor activated color processing: %#v", runner.render)
+		}
+		if runner.applyLibplaceboRenderFallback(fmt.Errorf("LLVM ERROR: Cannot select: ...")) {
+			t.Fatal("disabled HDR processor must not activate a fallback chain")
+		}
+		if !strings.Contains(runner.logs(), "已禁用 HDR / DV 色彩空间转换") {
+			t.Fatalf("missing disabled conversion log: %s", runner.logs())
+		}
+	}
+}
+
 func TestBuildColorspaceChainForDolbyVision(t *testing.T) {
 	info := "color_primaries=bt2020|color_space=bt2020nc|color_transfer=smpte2084|dolby_vision=1|dv_profile=8|"
 	chain := buildColorspaceChain(info, HDRProcessorLibplacebo)

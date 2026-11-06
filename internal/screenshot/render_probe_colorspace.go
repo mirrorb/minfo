@@ -54,6 +54,9 @@ func (r *screenshotRunner) detectColorspace() string {
 
 // buildColorspaceChain 返回 ffmpeg 使用的色彩空间转换过滤器链。
 func buildColorspaceChain(info, hdrProcessor string) string {
+	if NormalizeHDRProcessor(hdrProcessor) == HDRProcessorOff {
+		return ""
+	}
 	switch {
 	case shouldUseLibplaceboColorspace(info, hdrProcessor):
 		// Follow FFmpeg's documented CPU/llvmpipe example and keep the HDR/DV

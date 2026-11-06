@@ -42,6 +42,8 @@ func NormalizeHDRProcessor(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case HDRProcessorZscale:
 		return HDRProcessorZscale
+	case HDRProcessorOff:
+		return HDRProcessorOff
 	default:
 		return HDRProcessorLibplacebo
 	}

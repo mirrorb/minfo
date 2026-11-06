@@ -1,9 +1,10 @@
 <template>
-    <div class="variant-picker">
+    <div class="variant-picker" role="group" aria-label="HDR / DV 色彩空间转换">
         <button
             type="button"
             class="ghost variant-option"
             :class="{ active: modelValue === 'libplacebo' }"
+            :aria-pressed="modelValue === 'libplacebo'"
             :disabled="busy"
             @click="$emit('update:modelValue', 'libplacebo')"
         >
@@ -13,10 +14,21 @@
             type="button"
             class="ghost variant-option"
             :class="{ active: modelValue === 'zscale' }"
+            :aria-pressed="modelValue === 'zscale'"
             :disabled="busy"
             @click="$emit('update:modelValue', 'zscale')"
         >
             zscale
+        </button>
+        <button
+            type="button"
+            class="ghost variant-option"
+            :class="{ active: modelValue === 'off' }"
+            :aria-pressed="modelValue === 'off'"
+            :disabled="busy"
+            @click="$emit('update:modelValue', 'off')"
+        >
+            禁用
         </button>
     </div>
 </template>

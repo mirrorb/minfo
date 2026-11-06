@@ -166,7 +166,7 @@ function normalizeSubtitleMode(value) {
 }
 
 function normalizeHDRProcessor(value) {
-    return value === "zscale" ? "zscale" : DEFAULT_STATE.screenshotHDRProcessor;
+    return ["zscale", "off"].includes(value) ? value : DEFAULT_STATE.screenshotHDRProcessor;
 }
 
 function normalizeSizeMode(value) {

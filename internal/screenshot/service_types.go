@@ -25,6 +25,7 @@ const (
 
 	HDRProcessorLibplacebo = "libplacebo"
 	HDRProcessorZscale     = "zscale"
+	HDRProcessorOff        = "off"
 
 	SizeModeAuto     = "auto"
 	SizeModeOriginal = "original"

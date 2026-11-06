@@ -39,7 +39,7 @@ func TestParseScreenshotRequestKeepsSizeMode(t *testing.T) {
 	if err := os.WriteFile(path, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	values := url.Values{"path": {path}, "size_mode": {"original"}, "timestamp": {"00:01:02"}}
+	values := url.Values{"path": {path}, "size_mode": {"original"}, "hdr_processor": {"off"}, "timestamp": {"00:01:02"}}
 	request, err := http.NewRequest(http.MethodPost, "/api/screenshot-jobs", strings.NewReader(values.Encode()))
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestParseScreenshotRequestKeepsSizeMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer parsed.Cleanup()
-	if parsed.SizeMode != "original" || parsed.Count != 1 || len(parsed.Timestamps) != 1 {
+	if parsed.SizeMode != "original" || parsed.HDRProcessor != "off" || parsed.Count != 1 || len(parsed.Timestamps) != 1 {
 		t.Fatalf("unexpected screenshot request: %#v", parsed)
 	}
 }

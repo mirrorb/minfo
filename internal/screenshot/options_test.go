@@ -22,6 +22,8 @@ func TestNormalizeHDRProcessor(t *testing.T) {
 		{name: "default", input: "", want: HDRProcessorLibplacebo},
 		{name: "libplacebo", input: "libplacebo", want: HDRProcessorLibplacebo},
 		{name: "zscale", input: "zscale", want: HDRProcessorZscale},
+		{name: "disabled", input: "off", want: HDRProcessorOff},
+		{name: "normalized disabled", input: " OFF ", want: HDRProcessorOff},
 		{name: "unknown", input: "foo", want: HDRProcessorLibplacebo},
 	}
 
