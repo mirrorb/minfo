@@ -77,7 +77,7 @@ func Run(ctx context.Context, inputPath string, options RunOptions) (Result, err
 		return Result{}, err
 	}
 
-	output := SelectLargestPlaylistBlock(string(reportBytes))
+	output := SelectLongestPlaylistBlock(string(reportBytes))
 	if strings.TrimSpace(output) == "" {
 		output = string(reportBytes)
 	}

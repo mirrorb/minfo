@@ -6,9 +6,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
-var sizeLinePattern = regexp.MustCompile(`^Size:\s*([0-9,]+)\s+bytes`)
+var (
+	sizeLinePattern   = regexp.MustCompile(`^Size:\s*([0-9,]+)\s+bytes`)
+	lengthLinePattern = regexp.MustCompile(`^Length:\s*([0-9]+):([0-5][0-9]):([0-5][0-9](?:\.[0-9]{1,9})?)(?:\s|$)`)
+)
 
 // ExtractCodeBlock 从带有 [code]...[/code] 的输出中提取最有代表性的代码块；优先选择包含 DISC INFO 的块。
 func ExtractCodeBlock(output string) string {
@@ -46,8 +50,9 @@ func ExtractCodeBlock(output string) string {
 	return best
 }
 
-// SelectLargestPlaylistBlock 从完整 BDInfo 报告中保留体积最大的 PLAYLIST 区块及其前置说明。
-func SelectLargestPlaylistBlock(report string) string {
+// SelectLongestPlaylistBlock 保留时长最长的 PLAYLIST 区块及其前置说明；
+// 时长相同时优先保留体积更大的区块。
+func SelectLongestPlaylistBlock(report string) string {
 	lines := splitLines(report)
 	if len(lines) == 0 {
 		return report
@@ -56,9 +61,11 @@ func SelectLargestPlaylistBlock(report string) string {
 	prefix := make([]string, 0, len(lines))
 	blocks := make([][]string, 0, 4)
 	blockSizes := make([]int64, 0, 4)
+	blockLengths := make([]time.Duration, 0, 4)
 
 	currentBlock := make([]string, 0, 64)
 	var currentSize int64
+	var currentLength time.Duration
 	seenPlaylist := false
 
 	saveBlock := func() {
@@ -68,8 +75,10 @@ func SelectLargestPlaylistBlock(report string) string {
 		blockCopy := append([]string(nil), currentBlock...)
 		blocks = append(blocks, blockCopy)
 		blockSizes = append(blockSizes, currentSize)
+		blockLengths = append(blockLengths, currentLength)
 		currentBlock = currentBlock[:0]
 		currentSize = 0
+		currentLength = 0
 	}
 
 	for _, line := range lines {
@@ -90,6 +99,9 @@ func SelectLargestPlaylistBlock(report string) string {
 		if size := parsePlaylistSize(line); size > currentSize {
 			currentSize = size
 		}
+		if length := parsePlaylistLength(line); length > currentLength {
+			currentLength = length
+		}
 	}
 	saveBlock()
 
@@ -99,7 +111,8 @@ func SelectLargestPlaylistBlock(report string) string {
 
 	bestIndex := 0
 	for index := 1; index < len(blocks); index++ {
-		if blockSizes[index] > blockSizes[bestIndex] {
+		if blockLengths[index] > blockLengths[bestIndex] ||
+			(blockLengths[index] == blockLengths[bestIndex] && blockSizes[index] > blockSizes[bestIndex]) {
 			bestIndex = index
 		}
 	}
@@ -108,6 +121,19 @@ func SelectLargestPlaylistBlock(report string) string {
 	output = append(output, prefix...)
 	output = append(output, blocks[bestIndex]...)
 	return strings.Join(output, "\n")
+}
+
+// parsePlaylistLength 读取 Length: h:mm:ss[.fraction]，保留亚秒精度。
+func parsePlaylistLength(line string) time.Duration {
+	matches := lengthLinePattern.FindStringSubmatch(strings.TrimSpace(line))
+	if len(matches) != 4 {
+		return 0
+	}
+	length, err := time.ParseDuration(matches[1] + "h" + matches[2] + "m" + matches[3] + "s")
+	if err != nil {
+		return 0
+	}
+	return length
 }
 
 // parsePlaylistSize 会解析播放列表大小，并把原始输入转换成结构化结果。

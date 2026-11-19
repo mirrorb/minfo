@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"minfo/internal/media"
 )
 
 // buildCommandArgs 会按 BDInfoCLI 的位置参数规则构建命令参数。
@@ -24,9 +27,20 @@ func buildCommandArgs(scanInput, reportDir, playlist string) ([]string, error) {
 		selectionSpecified = true
 	}
 	if !selectionSpecified {
-		// BDInfoCLI 默认会进入交互式 playlist 选择；服务端场景没有 TTY，
-		// 因此默认切到 whole-disc 模式，再由后续逻辑提取主播放列表区块。
-		args = append(args, "-w")
+		if bdmv := detectBDMVSource(scanInput); bdmv != "" {
+			names, err := media.ListBDInfoPlaylists(filepath.Join(bdmv, "PLAYLIST"))
+			if err != nil {
+				return nil, fmt.Errorf("bdinfo: list playlists: %w", err)
+			}
+			if len(names) == 0 {
+				return nil, errors.New("bdinfo: no playlists remain after filtering loops and playlists shorter than 20 seconds")
+			}
+			args = append(args, "-m", strings.Join(names, ","))
+		} else {
+			// BDInfoCLI 默认会进入交互式 playlist 选择；服务端场景没有 TTY，
+			// 无可读取的 BDMV 目录时保留 whole-disc 回退。
+			args = append(args, "-w")
+		}
 	}
 	args = append(args, scanInput, reportDir)
 	return args, nil

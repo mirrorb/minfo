@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // SuggestedPath 表示路径联想结果中的一个候选项。
@@ -191,7 +192,11 @@ func suggestVirtualISOPaths(roots []string, prefix string, limit int) ([]Suggest
 				return nil, "", err
 			}
 			item.Size = info.Size()
-			item.Duration = readSuggestedPathDuration(filepath.Join(dirOnDisk, name))
+			duration, visible := suggestedPlaylist(filepath.Join(dirOnDisk, name))
+			if !visible {
+				continue
+			}
+			item.Duration = duration
 		}
 		items = append(items, item)
 		if limit > 0 && len(items) >= limit {
@@ -230,7 +235,11 @@ func listDir(dir, base string, limit int) ([]SuggestedPath, error) {
 				return nil, err
 			}
 			item.Size = info.Size()
-			item.Duration = readSuggestedPathDuration(full)
+			duration, visible := suggestedPlaylist(full)
+			if !visible {
+				continue
+			}
+			item.Duration = duration
 		}
 		items = append(items, item)
 		if limit > 0 && len(items) >= limit {
@@ -243,16 +252,17 @@ func listDir(dir, base string, limit int) ([]SuggestedPath, error) {
 	return items, nil
 }
 
-// readSuggestedPathDuration 在候选路径为 MPLS 文件时返回格式化时长。
-func readSuggestedPathDuration(path string) string {
+// suggestedPlaylist 应用 BDInfo 默认的短列表（<20 秒）和循环列表筛选。
+// 解析失败时保留文件供用户检查；普通文件和目录不受筛选影响。
+func suggestedPlaylist(path string) (duration string, visible bool) {
 	if !isMPLSFile(path) {
-		return ""
+		return "", true
 	}
-	duration, err := readMPLSDuration(path)
+	metadata, err := readMPLSMetadata(path)
 	if err != nil {
-		return ""
+		return "", true
 	}
-	return formatMPLSDuration(duration)
+	return formatMPLSDuration(metadata.Duration), metadata.Duration >= 20*time.Second && !metadata.HasLoops
 }
 
 // hasDirectorySuffix 会判断目录后缀是否已经存在。

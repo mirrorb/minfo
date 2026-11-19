@@ -12,6 +12,25 @@ import (
 
 const mplsClockRate = 45000
 
+// ListBDInfoPlaylists 返回通过 BDInfo 默认短列表和循环列表筛选的文件名。
+// 与路径浏览共用规则，避免整盘扫描重新包含已隐藏的 playlist。
+func ListBDInfoPlaylists(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !isMPLSFile(entry.Name()) {
+			continue
+		}
+		if _, visible := suggestedPlaylist(filepath.Join(dir, entry.Name())); visible {
+			names = append(names, entry.Name())
+		}
+	}
+	return names, nil
+}
+
 // isMPLSFile 判断路径是否指向 MPLS 播放列表文件。
 func isMPLSFile(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".mpls")
@@ -44,24 +63,37 @@ func resolveBDInfoPlaylistSelection(path string) (string, string, bool) {
 
 // readMPLSDuration 解析 MPLS 文件里主播放项的总时长。
 func readMPLSDuration(path string) (time.Duration, error) {
+	metadata, err := readMPLSMetadata(path)
+	return metadata.Duration, err
+}
+
+type mplsMetadata struct {
+	Duration time.Duration
+	HasLoops bool
+}
+
+// readMPLSMetadata 读取主角度播放项；循环判定与 BDInfo 0.7.5.6 一致：
+// 同一 clip 的同一入点出现多次，而非仅仅重复使用同一 clip。
+func readMPLSMetadata(path string) (mplsMetadata, error) {
+	var metadata mplsMetadata
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return metadata, err
 	}
 	if len(data) < 18 {
-		return 0, fmt.Errorf("mpls: file too short")
+		return metadata, fmt.Errorf("mpls: file too short")
 	}
 
 	fileType := string(data[:8])
 	switch fileType {
 	case "MPLS0100", "MPLS0200", "MPLS0300":
 	default:
-		return 0, fmt.Errorf("mpls: unsupported file type %q", fileType)
+		return metadata, fmt.Errorf("mpls: unsupported file type %q", fileType)
 	}
 
 	playlistOffset := int(readUint32BE(data[8:12]))
 	if playlistOffset < 0 || playlistOffset+10 > len(data) {
-		return 0, fmt.Errorf("mpls: invalid playlist offset")
+		return metadata, fmt.Errorf("mpls: invalid playlist offset")
 	}
 
 	pos := playlistOffset
@@ -72,31 +104,42 @@ func readMPLSDuration(path string) (time.Duration, error) {
 	pos += 2 // subitem_count
 
 	var totalTicks uint64
+	type clipStart struct {
+		name  string
+		ticks uint32
+	}
+	seen := make(map[clipStart]struct{})
 	for itemIndex := 0; itemIndex < itemCount; itemIndex++ {
 		itemStart := pos
 		if itemStart+2 > len(data) {
-			return 0, fmt.Errorf("mpls: truncated playlist item header")
+			return metadata, fmt.Errorf("mpls: truncated playlist item header")
 		}
 
 		itemLength := int(readUint16BE(data[pos : pos+2]))
 		itemEnd := itemStart + itemLength + 2
 		if itemEnd > len(data) {
-			return 0, fmt.Errorf("mpls: truncated playlist item body")
+			return metadata, fmt.Errorf("mpls: truncated playlist item body")
 		}
+		if itemLength < 20 {
+			return metadata, fmt.Errorf("mpls: truncated in/out time fields")
+		}
+		clipName := strings.ToUpper(string(data[itemStart+2 : itemStart+7]))
 
 		pos += 2 // item_length
 		pos += 5 // clip_information_file_name
 		pos += 4 // clip_codec_identifier
 		pos += 1 // reserved
 		pos += 2 // flags
-		if pos+8 > itemEnd {
-			return 0, fmt.Errorf("mpls: truncated in/out time fields")
-		}
 
 		inTime := readUint32BE(data[pos : pos+4])
 		pos += 4
 		outTime := readUint32BE(data[pos : pos+4])
 		pos += 4
+		key := clipStart{name: clipName, ticks: inTime}
+		if _, exists := seen[key]; exists {
+			metadata.HasLoops = true
+		}
+		seen[key] = struct{}{}
 
 		if outTime > inTime {
 			totalTicks += uint64(outTime - inTime)
@@ -105,11 +148,8 @@ func readMPLSDuration(path string) (time.Duration, error) {
 		pos = itemEnd
 	}
 
-	if totalTicks == 0 {
-		return 0, nil
-	}
-
-	return time.Duration(totalTicks * uint64(time.Second) / mplsClockRate), nil
+	metadata.Duration = time.Duration(totalTicks * uint64(time.Second) / mplsClockRate)
+	return metadata, nil
 }
 
 // formatMPLSDuration 把 MPLS 时长格式化为 H:MM:SS。
